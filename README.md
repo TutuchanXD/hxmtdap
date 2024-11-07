@@ -1,35 +1,36 @@
-<h1 id="iQ5VT">简介</h1>
+# hxmtdap
 
 HXMT数据处理Pipeline (hxmtdap)项目旨在以更方便的方式调用HXMTDAS的命令，来产生标准化的慧眼卫星数据产品。
 
-<h1 id="h3n8H">安装与依赖</h1>
+# 安装与依赖
 
 使用以下命令安装hxmtdap：
 
 ```bash
-pip install hxmtdap-0.2.3-py3-none-any.whl
+pip install . 
 ```
 
 该项目依赖以下Python库：
 
-```shell
+```plain
+requests>=2.24.0
 astropy>=4.0.0
 cycler>=0.10.0
 hvplot>=0.10.0
-ipython>=8.10.0
-matplotlib>=3.5.0
+matplotlib
 networkx>=3.1.0
-numpy>=1.25.0
-pandas>=2.0.0
+pandas
+sympy
 panel>=1.2.0
-pyinterval>=1.2.0
-rich>=12.0.0
-scipy>=1.10.0
-stingray>=2.0
-uncertainties>=3.2.0
+rich
+scipy
+uncertainties
+stingray
+corner
+portion
 ```
 
-<h1 id="ERbVO">快速开始</h1>
+# 快速开始
 
 以下示例展示如何从零开始快速生成一个源的谱、光变曲线和功率谱：
 
@@ -115,12 +116,13 @@ hep.grppha_he()
 hep.close()
 ```
 
-<h1 id="ySKj7">特点与功能</h1>
-<h2 id="EdvuB">解耦数据处理</h2>
+# 特点与功能
+
+## 解耦数据处理
 
 LE、ME和HE探测器的pipeline对应LEDA、MEDA和HEDA三个不同的模块，彼此之间没有交叉关系，可以根据所需的能段来选择使用不同的探测器模块来生成数据产品
 
-<h2 id="nadW5">日志记录</h2>
+## 日志记录
 
 hxmtdap可以保留完整的数据处理日志，可以在控制台输出数据处理过程且保留日志文件，日志文件的默认路径为`<your_expid_path>/log`；在初始化时，可以传入`logger_level`参数调整日志级别
 
@@ -130,7 +132,7 @@ from hxmtdap import LEDA
 lep = LEDA("<your_expid_path>", logger_level="DEBUG") # 推荐日志级别为DEBUG
 ```
 
-<h2 id="bhQEX">数据持久化</h2>
+## 数据持久化
 
 hxmtdap每次成功生成数据文件后，会将其以`node`的方式记录在图中（图文件默认保存在`<your_expid_path>/Graph`）；每次初始化都会尝试载入图文件，以获取保存的数据处理状态
 
@@ -154,7 +156,7 @@ lep = LEDA("<your_expid_path>")
 lep.lespecgen() # 无需运行前置命令，直接读取图中的node以获取之前的数据处理进度
 ```
 
-<h2 id="WCEJR">数据文件可视化</h2>
+## 数据文件可视化
 
 hxmtdap使用`node`和图来记录数据文件的状态、路径与参数、数据文件之间的血缘关系；可以通过`show`方法来查看当前数据处理状态下的数据文件图
 
@@ -181,7 +183,7 @@ lep = LEDA("<your_expid_path>")
 lep.lespecgen(node='myspec')
 ```
 
-<h2 id="XJP2W">显式调用数据文件</h2>
+## 显式调用数据文件
 
 可以通过`recoder`模块调用已生成的数据文件
 
@@ -194,7 +196,7 @@ lep.lespecgen(node='myspec')
 lep.recoder.myspec # 从这里获取刚生成的文件完整路径
 ```
 
-<h2 id="XNPcQ">自定义参数</h2>
+## 自定义参数
 
 hxmtdap在未指定参数时，会通过读取准备好的`json`默认参数文件（在包的`json`目录）获取默认参数；如果希望在执行某命令时使用自定义参数，只需要显式的传入参数值
 
@@ -206,7 +208,7 @@ lep = LEDA("<your_expid_path>")
 lep.lelcgen(starttime=369597279, stoptime=369598059)
 ```
 
-<h2 id="KPZdZ">动态数据结构</h2>
+## 动态数据结构
 
 hxmtdap通过`status`子模块检测活动的节点，当前的数据文件生成，仅依赖最新的前置数据文件，比如
 
@@ -222,7 +224,7 @@ lep.lelcgen(minE=2, maxE=4)
 lep.lebkgmap_lc() # 这里生成的光变曲线背景是2-4keV的
 ```
 
-<h2 id="GRLoC">能谱与背景的曝光时间对齐</h2>
+## 能谱与背景的曝光时间对齐
 
 `lebkgmap`、`mebkgmap`和`hebkgmap`在生成谱背景文件时，只会通过读取`gti`文件来获取背景的曝光时间；如果在生成能谱阶段显式的设置了`starttime`和`stoptime`，则后续生成的能谱背景的曝光时间无法与谱文件对齐。hxmtdap通过假`gti`文件的方式来保证谱背景和能谱的对齐
 
@@ -235,7 +237,7 @@ lep.lespecgen(starttime=369597279, stoptime=369603699)
 lep.lebkgmap_spec() # 这里生成的背景文件曝光时间是与谱对齐的
 ```
 
-<h2 id="h8srI">更规则的命名</h2>
+## 更规则的命名
 
 hxmtdap使用更规则清晰的命名规则
 
@@ -260,12 +262,13 @@ hep.hentpdsgen(segment=256., rebin=-0.06)
 # 生成的文件在 <your_expid_path>/pds/HE/leahy/-0.06/<expid>_HE_256s_leahy_35-46keV_2msBin.fps
 ```
 
-<h2 id="Yigzf">允许在IPython或Jupyter环境使用</h2>
+## 允许在IPython或Jupyter环境使用
 
 hxmtdap可以检测当前运行环境，来配置相应的环境变量
 
-<h2 id="DyiHu">光变曲线相关</h2>
-<h3 id="acf6P">显式的输入能段来生成光变曲线</h3>
+## 光变曲线相关
+
+### 显式的输入能段来生成光变曲线
 
 hxmtdap内置pi转换，可以直接显式的输入
 
@@ -277,7 +280,7 @@ lep = LEDA("<your_expid_path>")
 lep.lelcgen(minE=1, maxE=2) # 不需要输入minPI maxPI
 ```
 
-<h3 id="PcuGA">光变曲线、背景和功率谱自动绘图</h3>
+### 光变曲线、背景和功率谱自动绘图
 
 对于光变曲线可以自动绘制`gti`范围内的断轴图像，图像路径与光变曲线相同（默认bin为1秒）
 
@@ -285,7 +288,7 @@ lep.lelcgen(minE=1, maxE=2) # 不需要输入minPI maxPI
 
 ![](https://cdn.nlark.com/yuque/0/2024/png/2907884/1719826505341-15308fa4-7526-418f-88d9-131a5a4a14e6.png)
 
-<h2 id="rCTSg">对并行的支持</h2>
+## 对并行的支持
 
 经过测试，hxmtdap支持多进程并行；在并行时单进程可能占用200-1600M活动内存(会回收)，需要控制最大进程数以防止内存溢出；以下是一个使用进程池的例子：
 
@@ -431,7 +434,7 @@ def main(dl):
 main(data_lst)
 ```
 
-<h2 id="GS6ap">工具函数</h2>
+## 工具函数
 
 hxmtdap提供了一些对数据文件读取和操作的工具，分别有：
 
@@ -505,7 +508,7 @@ log_resolver.reconstruct_model('lorentz_4')
 log_resolver.reconstruct_model('lorentz + lorentz_4')
 ```
 
-<h1 id="Pv0oy">如何贡献</h1>
+# 如何贡献
 
 <font style="color:rgb(13, 13, 13);">鼓励其他开发者参与进来，并提供详细的说明如何贡献，可以包括：</font>
 
@@ -513,11 +516,13 @@ log_resolver.reconstruct_model('lorentz + lorentz_4')
 + <font style="color:rgb(13, 13, 13);">提交功能请求</font>
 + <font style="color:rgb(13, 13, 13);">提交合并请求</font>
 
-<h1 id="J72XP">许可证</h1>
+# 许可证
 
-当前版本为内部测试版，所有代码和文档的版权均由**Chenxu Gao**所有。未经许可，不得分发此软件及其文档。
+~~当前版本为内部测试版，所有代码和文档的版权均由~~~~**Chenxu Gao**~~~~所有。未经许可，不得分发此软件及其文档。~~
 
-计划测试阶段结束后使用MIT开源许可。
+这个项目使用了来自`brokenaxes`的代码，该项目由_**Ben Dichter **_许可，与 MIT 协议下分发。
+
+本项目使用 Apache License 2.0 进行开源。
 
 
 
