@@ -1,0 +1,59 @@
+{
+    "lepical": {
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "lerecon": {
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "lescreen": {
+        "userdetid": "0-95",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "0",
+        "maxPI": "1535",
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "legtigen": {
+        "defaultexpr": "NONE",
+        "expr": "ELV>10&&DYE_ELV>30&&COR>8&&SAA_FLAG==0&&T_SAA>=300&&TN_SAA>=300&&ANG_DIST<=0.04",
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "legticorr": {},
+    "lelcgen": {
+        "userdetid": "0,2-4,6-10,12,14,20,22-26,28,30,32,34-36,38-42,44,46,52,54-58,60-62,64,66-68,70-74,76,78,84,86,88-90,92-94",
+        "binsize": "0.001953125",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "106",
+        "maxPI": "1169",
+        "eventtype": "1",
+        "clobber": "yes"
+    },
+    "lespecgen": {
+        "userdetid": "0,2-4,6-10,12,14,20,22-26,28,30,32,34-36,38-42,44,46,52,54-58,60-62,64,66-68,70-74,76,78,84,86,88-90,92-94",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "0",
+        "maxPI": "1535",
+        "eventtype": "1"
+    },
+    "lerspgen": {
+        "ra": "-1",
+        "dec": "-91",
+        "clobber": "yes"
+    },
+    "lebkgmap_spec": {
+        "ftype": "spec",
+        "minPI": "0",
+        "maxPI": "1535"
+    },
+    "lebkgmap_lc": {
+        "ftype": "lc",
+        "minPI": "106",
+        "maxPI": "1169"
+    }
+}

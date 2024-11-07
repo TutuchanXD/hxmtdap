@@ -1,0 +1,70 @@
+{
+    "mepical": {
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "megrade": {
+        "binsize": "1",
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "megtigen": {
+        "defaultexpr": "NONE",
+        "expr": "ELV>10&&COR>8&&SAA_FLAG==0&&T_SAA>300&&TN_SAA>300&&ANG_DIST<=0.04",
+        "ELV": "10",
+        "DYE_ELV": "-1",
+        "COR": "8",
+        "SAA_FLAG": "0",
+        "T_SAA": "300",
+        "TN_SAA": "300",
+        "MOON_ANGLE": "-1",
+        "SUN_ANGLE": "-1",
+        "ANG_DIST": "0.04",
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "megticorr": {
+        "detectorstatus": "$HEADAS/refdata/detectorstatus.fits"
+    },
+    "mescreen": {
+        "userdetid": "0-53",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "0",
+        "maxPI": "1023",
+        "clobber": "yes"
+    },
+    "melcgen": {
+        "userdetid": "0-7,11-25,29-43,47-53",
+        "binsize": "0.001953125",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "119",
+        "maxPI": "546",
+        "deadcorr": "yes",
+        "clobber": "yes"
+    },
+    "mespecgen": {
+        "userdetid": "0-7,11-25,29-43,47-53",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "0",
+        "maxPI": "1023",
+        "clobber": "yes"
+    },
+    "merspgen": {
+        "ra": "-1",
+        "dec": "-91",
+        "clobber": "yes"
+    },
+    "mebkgmap_spec": {
+        "ftype": "spec",
+        "minPI": "0",
+        "maxPI": "1023"
+    },
+    "mebkgmap_lc": {
+        "ftype": "lc",
+        "minPI": "119",
+        "maxPI": "546"
+    }
+}

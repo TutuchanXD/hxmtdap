@@ -1,0 +1,59 @@
+{
+    "hepical": {
+        "minpulsewidth": "54",
+        "maxpulsewidth": "70",
+        "clobber": "yes"
+    },
+    "hegtigen": {
+        "defaultexpr": "NONE",
+        "expr": "ELV>10&&COR>8&&SAA_FLAG==0&&TN_SAA>300&&T_SAA>300&&ANG_DIST<=0.04",
+        "pmexpr": "",
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "hescreen": {
+        "userdetid": "0-17",
+        "eventtype": "1",
+        "anticoincidence": "yes",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "0",
+        "maxPI": "255",
+        "clobber": "yes",
+        "history": "yes"
+    },
+    "helcgen": {
+        "userdetid": "0-15,17",
+        "binsize": "0.001953125",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "8",
+        "maxPI": "162",
+        "deadcorr": "yes",
+        "clobber": "yes"
+    },
+    "hespecgen": {
+        "userdetid": "0-15,17",
+        "eventtype": "1",
+        "starttime": "0",
+        "stoptime": "0",
+        "minPI": "8",
+        "maxPI": "162",
+        "clobber": "yes"
+    },
+    "herspgen": {
+        "ra": "-1",
+        "dec": "-91",
+        "clobber": "yes"
+    },
+    "hebkgmap_spec": {
+        "ftype": "spec",
+        "minPI": "0",
+        "maxPI": "255"
+    },
+    "hebkgmap_lc": {
+        "ftype": "lc",
+        "minPI": "8",
+        "maxPI": "162"
+    }
+}
