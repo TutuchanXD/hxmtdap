@@ -28,6 +28,6 @@ authors = [
 ]
 requires-python = ">=3.7"
 readme = {file = "README.md", content-type = "text/markdown"}
-license = {text = "MIT License"}
+license = {text = "GPL 3.0 License"}
 
 
