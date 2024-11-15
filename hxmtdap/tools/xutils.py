@@ -105,7 +105,7 @@ def open_chain(mcmcfile, modlabel=True, check=True):
 
 def get_nvmax(lineE, lineE_errL, lineE_errU, width, width_errL, width_errU):
     """
-    根据lineE和width的误差计算nvmax
+    根据lineE和width的误差计算nvmax，使用线性误差传递
     """
 
     def _isnan(v):
@@ -159,7 +159,7 @@ def get_nvmax(lineE, lineE_errL, lineE_errU, width, width_errL, width_errU):
 
 def get_rms(norm, norm_errL, norm_errU):
     """
-    计算rms
+    计算rms，使用线性误差传递
     """
 
     def _isnan(v):
@@ -688,11 +688,6 @@ class LogDataResolver:
         return lorentz_allpd, powerlaw_allpd
 
 
-# class XDataResolver:
-#     pass
-#     import heasoftpy
-
-
 def separate_singel_result(xcmfile, plotmod: Literal["uf", "euf"] = "euf"):
     """
     输入xcm文件的绝对路径
@@ -762,6 +757,7 @@ def generate_mcmc_chain(xspobj, length=30000, burn=30000, mcmcfile="mcmcfile.fit
         xspobj.Xset.restore(temp.name)
 
 
+# TODO 待完成
 def generate_mcmc_chain2(
     xcmfile, length=50000, burn=50000, walker=200, mcmcfile="mcmcfile.fits"
 ):

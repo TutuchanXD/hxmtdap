@@ -4,13 +4,15 @@
 HXMT数据处理Pipeline (hxmtdap)项目旨在以更方便的方式调用HXMTDAS的命令，来产生标准化的慧眼卫星数据产品。
 
 # 安装与依赖
-使用以下命令安装hxmtdap：
+使用以下命令安装hxmtdap、
 
 ```bash
+git clone https://github.com/TutuchanXD/hxmtdap.git
+cd hxmtdap
 pip install . 
 ```
 
-该项目依赖以下Python库：
+该项目依赖以下Python库…
 
 ```plain
 requests>=2.24.0
@@ -296,7 +298,7 @@ global_logger = setup_logger("all.log", <your_log_path>)
 
 le_lcrange = ["1-2", "2-5", "5-10", "1-10"]
 me_lcrange = ["10-16", "16-35", "10-35"]
-he_lcrange = ["35-46", "46-60", "60-76", "76-100", "100-200", "35-200"]
+he_lcrange = ["35-46", "46-60", "60-76", "76-100", "100-250", "35-250"]
 
 rebin_range = [0, -0.02, -0.04, -0.06, -0.08, -0.1]
 
@@ -328,7 +330,7 @@ def process_lep(i):
         lep.lebkgmap_spec()
         lep.lerspgen()
         lep.grppha_le()
-        lep.close()
+        lep.clean()
         global_logger.info(f"Finished LEP {i}.")
     except Exception as e:
         global_logger.error(f"Error processing LEP for input {get_expID(i)}: {e}")
@@ -361,7 +363,7 @@ def process_mep(i):
         mep.mebkgmap_spec()
         mep.merspgen()
         mep.grppha_me()
-        mep.close()
+        mep.clean()
         global_logger.info(f"Finished MEP {i}.")
     except Exception as e:
         global_logger.error(f"Error processing MEP for input {get_expID(i)}: {e}")
@@ -392,7 +394,7 @@ def process_hep(i):
         hep.hebkgmap_spec()
         hep.herspgen()
         hep.grppha_he()
-        hep.close()
+        hep.clean()
         global_logger.info(f"Finished HEP {i}.")
     except Exception as e:
         global_logger.error(f"Error processing HEP for input {get_expID(i)}: {e}")
