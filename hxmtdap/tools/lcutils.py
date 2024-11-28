@@ -355,6 +355,17 @@ def convert_TT2UTC(TT, fits=None):
     return get_timeobj(TT, fits).utc.iso.split(".")[0].replace(" ", "T")
 
 
+def get_sliced_lc(lc, sliced_num):
+    """
+    如果lcobj有多段GTI, 返回序号为sliced_num的光变曲线
+    """
+    if not isinstance(lc, Lightcurve):
+        raise Exception("Not support current input")
+
+    nowgti = lc.gti[sliced_num]
+    return lc.truncate(nowgti[0], nowgti[1], method="time")
+
+
 def slice_multiple_gtis(gti_lists, slice_length=128, index=False):
     """
     将多个GTI列表进行切片,支持Table、nparray，并对结果进行排序；当index=True时，返回行号和切片结果
@@ -552,6 +563,7 @@ def plotlc_stack(
     col_names=None,
     break_yaxis=True,
     figsize=None,
+    legend=True,
     plotmode: Literal["plot", "errorbar"] = "plot",
 ):
     if col_names is None:
@@ -640,7 +652,8 @@ def plotlc_stack(
         label=f"binsize={binsize:.5g}s",
     )
     bax.plot([], [], " ", label=rf"$\Delta t$={get_exposure_from_gti(gti):.2f}")
-    bax.legend(loc="best")
+    if legend:
+        bax.legend(loc="best")
     bax.set_title("\n".join(lcfiles))
 
     return fig, bax
