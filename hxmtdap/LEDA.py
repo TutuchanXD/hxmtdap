@@ -12,8 +12,10 @@ from .core.parameters import LEParameters
 from .core.recode import LERecoder
 from .core.status import LEStatus
 
+from .tools.evtutils import plotpds_from_evt
 from .tools.lcutils import plotlc, plotbkg
 from .tools.pdsutils import plotpds
+
 
 class LEService(object):
     """
@@ -261,6 +263,11 @@ class LEScreenPipeline(LEBasePipeline):
             self.status.update("screen", fnode)
             self.recoder.save_graph()
             self.logger.info(f"Generated {fnode}.")
+
+            # 保存图像
+            fig, _ = plotpds_from_evt(output)
+            fig.savefig(f"{output}.png")
+            plt.close(fig)
             return output
 
 

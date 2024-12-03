@@ -11,8 +11,10 @@ from .core.parameters import MEParameters
 from .core.recode import MERecoder
 from .core.status import MEStatus
 
+from .tools.evtutils import plotpds_from_evt
 from .tools.lcutils import plotlc, plotbkg
 from .tools.pdsutils import plotpds
+
 
 class MEService(object):
     """
@@ -277,6 +279,11 @@ class MEScreenPipeline(MEBasePipeline):
             self.status.update("screen", fnode)
             self.recoder.save_graph()
             self.logger.info(f"Generated {fnode}.")
+
+            # 保存图像
+            fig, _ = plotpds_from_evt(output)
+            fig.savefig(f"{output}.png")
+            plt.close(fig)
             return output
 
 
@@ -662,6 +669,6 @@ class MEDA(MEScreenPipeline, MELightcurvePipeline, MESpectrumPipeline):
 
         loggername = self.logger.name
         logging.Logger.manager.loggerDict.pop(loggername, None)
-        
+
         self._is_closed = True
         del self.logger

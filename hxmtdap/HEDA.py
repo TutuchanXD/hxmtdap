@@ -11,6 +11,7 @@ from .core.parameters import HEParameters
 from .core.recode import HERecoder
 from .core.status import HEStatus
 
+from .tools.evtutils import plotpds_from_evt
 from .tools.lcutils import plotlc, plotbkg
 from .tools.pdsutils import plotpds
 
@@ -196,6 +197,11 @@ class HEScreenPipeline(HEBasePipeline):
             self.status.update("screen", fnode)
             self.recoder.save_graph()
             self.logger.info(f"Generated {fnode}.")
+
+            # 保存图像
+            fig, _ = plotpds_from_evt(output)
+            fig.savefig(f"{output}.png")
+            plt.close(fig)
             return output
 
 
@@ -581,6 +587,6 @@ class HEDA(HEScreenPipeline, HELightcurvePipeline, HESpectrumPipeline):
 
         loggername = self.logger.name
         logging.Logger.manager.loggerDict.pop(loggername, None)
-        
+
         self._is_closed = True
         del self.logger

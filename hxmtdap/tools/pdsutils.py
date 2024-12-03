@@ -65,7 +65,11 @@ def open_pds(fps):
         power_err = pds["ERROR"]
         return (frequency, frequency_err, power, power_err)
     elif isinstance(fps, Powerspectrum):
-        return fps
+        try:
+            res = fps.freq, fps.freq_err, fps.power, fps.power_err
+        except AttributeError:
+            res = fps.freq, None, fps.power, None
+        return res
 
 
 def generate_pds_from_lc(
@@ -206,12 +210,14 @@ def plotpds(fps, rebin=0):
             (np.array(obj.freq[1:]) - np.array(obj.freq[0:-1])) / 2,
             (obj.freq[-1] - obj.freq[-2]) / 2,
         )
-
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111)
-    ax.errorbar(
-        x=obj.freq, xerr=freq_err, y=obj.power, yerr=obj.power_err, linestyle=""
-    )
+    if power_err is None:
+        ax.step(x=obj.freq, y=obj.power, where="mid")
+    else:
+        ax.errorbar(
+            x=obj.freq, xerr=freq_err, y=obj.power, yerr=obj.power_err, linestyle=""
+        )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("Frequency (Hz)")
@@ -219,20 +225,28 @@ def plotpds(fps, rebin=0):
     if isinstance(fps, str):
         ax.set_title(fps)
 
-    x_lower = obj.freq[0] - freq_err[0]
-    x_upper = obj.freq[-1] + freq_err[-1]
+    if freq_err is None:
+        x_lower = obj.freq[0]
+        x_upper = obj.freq[-1]
+    else:
+        x_lower = obj.freq[0] - freq_err[0]
+        x_upper = obj.freq[-1] + freq_err[-1]
     ax.set_xlim(x_lower, x_upper)
 
-    y_lower = np.min(obj.power) - obj.power_err[np.argmin(obj.power)]
-    y_upper = np.max(obj.power) + obj.power_err[np.argmax(obj.power)]
-    ax.set_ylim(y_lower, y_upper)
+    if obj.power_err is None:
+        y_lower = np.min(obj.power)
+        y_upper = np.max(obj.power)
+    else:
+        y_lower = np.min(obj.power) - obj.power_err[np.argmin(obj.power)]
+        y_upper = np.max(obj.power) + obj.power_err[np.argmax(obj.power)]
+        ax.set_ylim(y_lower, y_upper)
 
     return fig, ax
 
 
 def meanpds(*pdsfiles, method="hdul"):
     """
-    生成平均功率谱
+    输入多个功率谱文件，生成他们的平均功率谱
     """
     all_powers = []
     pdsobj = fits.open(pdsfiles[0])

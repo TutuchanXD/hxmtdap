@@ -536,7 +536,8 @@ def plotlc_concat(
     bax.set_xlabel("Time (s, from %d)" % (lc_combined.time[0]))
     bax.set_ylabel(f"{col_names[1]}")
     bax.legend(loc="best")
-    bax.set_title("\n".join(lcfiles))
+    if isinstance(lcfile, str):
+        bax.set_title("\n".join(lcfiles))
 
     # 如果需要额外的高亮区域显示
     if not extra_marker_range is None:
@@ -654,7 +655,8 @@ def plotlc_stack(
     bax.plot([], [], " ", label=rf"$\Delta t$={get_exposure_from_gti(gti):.2f}")
     if legend:
         bax.legend(loc="best")
-    bax.set_title("\n".join(lcfiles))
+    if isinstance(lcfile, str):
+        bax.set_title("\n".join(lcfiles))
 
     return fig, bax
 
