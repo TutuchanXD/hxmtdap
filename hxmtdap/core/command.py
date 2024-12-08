@@ -942,6 +942,24 @@ class HXMTCommande:
 
         return Parameters, cmd_string, (infile, respfile, backfile)
 
+    @staticmethod
+    def ftgrouppha(infile, respfile, outfile, grouptype="opt", clobber="yes", **kwargs):
+        RequiredParameters = {
+            "infile": infile,
+            "outfile": outfile,
+            "grouptype": grouptype,
+            "respfile": respfile,
+            "clobber": clobber,
+        }
+        Parameters = RequiredParameters.copy()
+        otherkwargs_string = " ".join(f"{key}='{value}'" for key, value in kwargs)
+        cmd_string = (
+            f"ftgrouppha infile='{infile}' respfile='{respfile}' outfile='{outfile}' grouptype='{grouptype}' clobber='{clobber}' "
+            + otherkwargs_string
+        )
+        # TODO 把这里补全
+        return Parameters, cmd_string, (infile, respfile)
+
 
 def params_to_json(cls):
     """

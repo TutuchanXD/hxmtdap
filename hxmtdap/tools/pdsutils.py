@@ -215,8 +215,9 @@ def plotpds(fps, rebin=0):
     if power_err is None:
         ax.step(x=obj.freq, y=obj.power, where="mid")
     else:
+        ax.step(x=obj.freq, y=obj.power, where="mid", color="#FA9D3A")
         ax.errorbar(
-            x=obj.freq, xerr=freq_err, y=obj.power, yerr=obj.power_err, linestyle=""
+            x=obj.freq, y=obj.power, yerr=obj.power_err, linestyle="", color="#FA9D3A"
         )
     ax.set_xscale("log")
     ax.set_yscale("log")
