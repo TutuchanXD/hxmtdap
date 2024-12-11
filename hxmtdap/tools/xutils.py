@@ -103,10 +103,22 @@ def open_chain(mcmcfile, modlabel=True, check=True):
     return mcmcpd
 
 
-def get_nvmax(lineE, lineE_errL, lineE_errU, width, width_errL, width_errU):
+def get_nvmax(
+    lineE, lineE_errL, lineE_errU, width, width_errL, width_errU, ignore_sign=False
+):
     """
     根据lineE和width的误差计算nvmax，使用线性误差传递
     """
+    if ignore_sign:
+        lineE_errL = abs(float(lineE_errL))
+        lineE_errU = abs(float(lineE_errU))
+        width_errL = abs(float(width_errL))
+        width_errU = abs(float(width_errU))
+    else:
+        lineE_errL = float(lineE_errL)
+        lineE_errU = float(lineE_errU)
+        width_errL = float(width_errL)
+        width_errU = float(width_errU)
 
     def _isnan(v):
         if isinstance(v, float):
@@ -114,28 +126,28 @@ def get_nvmax(lineE, lineE_errL, lineE_errU, width, width_errL, width_errU):
         else:
             return False
 
-    if float(lineE_errL) >= 0:
+    if lineE_errL >= 0:
         lineE_vL = ufloat(
             float(f"{float(lineE):.6f}"), float(f"{float(lineE_errL):.6f}")
         )
     else:
         lineE_vL = np.nan
 
-    if float(lineE_errU) >= 0:
+    if lineE_errU >= 0:
         lineE_vU = ufloat(
             float(f"{float(lineE):.6f}"), float(f"{float(lineE_errU):.6f}")
         )
     else:
         lineE_vU = np.nan
 
-    if float(width_errL) >= 0:
+    if width_errL >= 0:
         width_vL = ufloat(
             float(f"{float(width):.6f}"), float(f"{float(width_errL):.6f}")
         )
     else:
         width_vL = np.nan
 
-    if float(width_errU) >= 0:
+    if width_errU >= 0:
         width_vU = ufloat(
             float(f"{float(width):.6f}"), float(f"{float(width_errU):.6f}")
         )
@@ -143,6 +155,10 @@ def get_nvmax(lineE, lineE_errL, lineE_errU, width, width_errL, width_errU):
         width_vU = np.nan
 
     nvmax_v = np.sqrt(lineE**2 + (width / 2) ** 2)
+
+    # for zero-central lor
+    if lineE == 0.0:
+        lineE_vL, lineE_vU = ufloat(0, 0), ufloat(0, 0)
 
     if _isnan(lineE_vL) or _isnan(width_vL):
         nvmax_vL = np.nan
@@ -455,7 +471,9 @@ class LogDataResolver:
         )
         return efree_pd
 
-    def stat_pds_result(self, mcmcfile=None, errange=90, nvmax=True, ext_json=None):
+    def stat_pds_result(
+        self, mcmcfile=None, errange=90, nvmax=True, ext_json=None, ignore_sign=False
+    ):
         """
         统计功率谱拟合结果，会从MCMC文件中读取误差
         """
@@ -640,10 +658,12 @@ class LogDataResolver:
                 lorentz_allpd.loc[index, "norm_errU"],
             )
 
-            # 如果lineE的误差没有计算
-            if np.isnan(lineE_errL) or np.isnan(lineE_errU):
+            # 如果该lor不是零心的，且lineE的误差没有计算
+            if (np.isnan(lineE_errL) or np.isnan(lineE_errU)) and (not lineE == 0.0):
 
-                nvmax, _, _ = get_nvmax(lineE, 0, 0, width, 0, 0)
+                nvmax, _, _ = get_nvmax(
+                    lineE, 0, 0, width, 0, 0, ignore_sign=ignore_sign
+                )
                 rms, rms_errL, rms_errU = get_rms(norm, norm_errL, norm_errU)
                 lorentz_allpd.loc[index, "nvmax"] = nvmax
                 lorentz_allpd.loc[index, "nvmax_errL"] = np.nan
@@ -668,7 +688,13 @@ class LogDataResolver:
             # 如果lineE的误差有计算
             else:
                 nvmax, nvmax_errL, nvmax_errU = get_nvmax(
-                    lineE, lineE_errL, lineE_errU, width, width_errL, width_errU
+                    lineE,
+                    lineE_errL,
+                    lineE_errU,
+                    width,
+                    width_errL,
+                    width_errU,
+                    ignore_sign=ignore_sign,
                 )
                 rms, rms_errL, rms_errU = get_rms(norm, norm_errL, norm_errU)
                 lorentz_allpd.loc[index, "nvmax"] = nvmax
@@ -680,7 +706,7 @@ class LogDataResolver:
 
                 if np.isclose(lineE, nvmax, rtol=1e-2):
                     lorentz_allpd.loc[index, "comptype"] = "QPO"
-                elif np.isclose(lineE, rms, rtol=1e-1):
+                elif np.isclose(lineE, nvmax, rtol=1e-1):
                     lorentz_allpd.loc[index, "comptype"] = "peak_noise"
                 else:
                     lorentz_allpd.loc[index, "comptype"] = "flat_noise"

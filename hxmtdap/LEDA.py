@@ -494,8 +494,13 @@ class LELightcurvePipeline(LEBasePipeline):
 
             # 保存图像
             fig, _ = plotpds(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            try:
+                fig.savefig(f"{output}.png")
+                plt.close(fig)
+            except OverflowError:
+                self.logger.warning(f"OverflowError when saving {output}.png")
+            del fig, _
+
             return output
 
 

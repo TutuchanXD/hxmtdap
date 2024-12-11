@@ -1,5 +1,5 @@
 # hxmtdap
-![](https://img.shields.io/badge/License-GTP--3.0-blue?style=flat&logo=gnu) ![](https://img.shields.io/badge/Python-%3E%3D3.7-blue?style=flat&logo=python&logoColor=white) ![](https://img.shields.io/badge/Version-0.2.5-yellow?style=flat)
+![](https://img.shields.io/badge/License-GTP--3.0-blue?style=flat&logo=gnu) ![](https://img.shields.io/badge/Python-%3E%3D3.7-blue?style=flat&logo=python&logoColor=white) ![](https://img.shields.io/badge/Version-0.2.6-yellow?style=flat)
 
 HXMT数据处理Pipeline (hxmtdap)项目旨在以更方便的方式调用HXMTDAS的命令，来产生标准化的慧眼卫星数据产品。
 

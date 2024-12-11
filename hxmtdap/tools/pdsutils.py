@@ -53,23 +53,39 @@ mpl.rcParams["axes.prop_cycle"] = cycler(
 )
 
 
-def open_pds(fps):
+def open_pds(fps, dtype: Literal["stingray", "tuple"] = "stingray"):
     """
     从FITS文件中读取功率谱数据
     """
+
+    def stglize(freq, freq_err, power, power_err):
+        stg = Powerspectrum()
+        stg.freq = freq
+        stg.freq_err = freq_err
+        stg.power = power
+        stg.power_err = power_err
+        return stg
+
     if isinstance(fps, str):
         pds = Table.read(fps, 1, unit_parse_strict="silent")
-        frequency = pds["FREQUENCY"]
-        frequency_err = pds["XAX_E"]
+        freq = pds["FREQUENCY"]
+        freq_err = pds["XAX_E"]
         power = pds["POWER"]
         power_err = pds["ERROR"]
-        return (frequency, frequency_err, power, power_err)
+        if dtype == "tuple":
+            return (freq, freq_err, power, power_err)
+        elif dtype == "stingray":
+            return stglize(freq, freq_err, power, power_err)
+
     elif isinstance(fps, Powerspectrum):
-        try:
-            res = fps.freq, fps.freq_err, fps.power, fps.power_err
-        except AttributeError:
-            res = fps.freq, None, fps.power, None
-        return res
+        if dtype == "tuple":
+            try:
+                res = fps.freq, None, fps.power, fps.power_err
+            except AttributeError:
+                res = fps.freq, None, fps.power, None
+            return res
+        elif dtype == "stingray":
+            return fps
 
 
 def generate_pds_from_lc(
@@ -183,12 +199,7 @@ def plotpds(fps, rebin=0):
     """
     绘制功率谱， 返回(fig,ax)
     """
-    freq, freq_err, power, power_err = open_pds(fps)
-
-    obj = Powerspectrum()
-    obj.freq = freq
-    obj.power = power
-    obj.power_err = power_err
+    obj = open_pds(fps, dtype="stingray")
 
     if abs(rebin) > 2:
         raise Exception("rebin must be within -1 to 1")
@@ -203,13 +214,19 @@ def plotpds(fps, rebin=0):
         else:
             obj = obj.rebin_log(abs(rebin))
 
-    if np.array_equal(freq, obj.freq):
-        pass
-    else:
+    try:
+        freq_err = obj.freq_err
+    except AttributeError:
         freq_err = np.append(
             (np.array(obj.freq[1:]) - np.array(obj.freq[0:-1])) / 2,
             (obj.freq[-1] - obj.freq[-2]) / 2,
         )
+
+    try:
+        power_err = obj.power_err
+    except AttributeError:
+        power_err = None
+
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111)
     if power_err is None:
@@ -245,14 +262,14 @@ def plotpds(fps, rebin=0):
     return fig, ax
 
 
-def meanpds(*pdsfiles, method="hdul"):
+def meanpds(*pdsfiles, method: Literal["hdul", "tb"] = "hdul"):
     """
     输入多个功率谱文件，生成他们的平均功率谱
     """
     all_powers = []
     pdsobj = fits.open(pdsfiles[0])
     for fits_file in pdsfiles:
-        frequency, frequency_err, power, power_err = open_pds(fits_file)
+        frequency, frequency_err, power, power_err = open_pds(fits_file, dtype="tuple")
         # 将功率及其误差转换为uncertainties库可以处理的形式
         power_with_err = unumpy.uarray(power, power_err)
         all_powers.append(power_with_err)
@@ -398,7 +415,7 @@ def fps2xsp(fpsfile):
     basename = os.path.basename(fpsfile)
     prefix = basename.replace(".fps", "")
 
-    freq, dfreq, power, dpower = open_pds(fpsfile)
+    freq, dfreq, power, dpower = open_pds(fpsfile, dtype="tuple")
     flux_data = np.array(
         [
             freq - dfreq,
@@ -426,6 +443,115 @@ def fps2xsp(fpsfile):
 
     os.chdir(pwd)
     return os.path.join(dirname, pha_file)
+
+
+def get_allpdsdata_fromxcm(xcmfile=None, savecsv=False, plottype="euf", savefmt=None):
+    """
+    输入xcm文件完整路径，返回绘图数据DataFrame
+    """
+
+    def xcm_restore(xcmfile):
+        now_path = os.getcwd()
+        os.chdir(os.path.dirname(xcmfile))
+        xspec.Xset.restore(xcmfile)
+        os.chdir(now_path)
+
+    def str_restore(xspec_string):
+        with open("tmp_lout.xcm", "w+") as f:
+            f.write(xspec_string)
+        xspec.Xset.restore("tmp_lout.xcm")
+        os.remove("tmp_lout.xcm")
+        return
+
+    def auto_restore(lens, d):
+        p = list(range(1, lens + 1))
+        i1 = 0
+        i2 = p.index(d)
+        if i1 == i2:
+            pass
+        else:
+            str_restore(f"delcomp {i1+1}-{i2}")
+            p[:i2] = []
+        i3 = 0
+        i4 = len(p)
+        if i4 == 1:
+            pass
+        else:
+            str_restore(f"delcomp {i3+2}-{i4}")
+            p[(i3 + 1) :] = []
+        return
+
+    # ------ main -------
+    import xspec
+
+    xcmfile_path = xcmfile
+    os.chdir(os.path.dirname(xcmfile_path))
+    xcm_restore(xcmfile_path)
+    if savecsv:
+        if not os.path.exists("PDS_MODEL"):
+            os.mkdir("PDS_MODEL")
+        os.chdir("PDS_MODEL")
+        xspec.Plot.device = "ori_m.ps /vcps"
+    else:
+        xspec.Plot.device = "/null"
+    xspec.Plot.xAxis = "keV"
+    xspec.Plot(plottype)
+    x = xspec.Plot.x()
+    data = xspec.Plot.y()
+    xerr = xspec.Plot.xErr()
+    data_err = xspec.Plot.yErr()
+    tol_m = xspec.Plot.model()
+
+    if savecsv:
+        xspec.Plot.device = "chi.ps /vcps"
+    else:
+        xspec.Plot.device = "/null"
+    xspec.Plot("chi")
+    chisq = xspec.Plot.y()
+
+    m = xspec.AllModels(1)
+    lens = len(m.componentNames)
+    lor_M = []
+    for i in list(range(1, lens + 1)):
+        auto_restore(lens, i)
+        if savecsv:
+            xspec.Plot.device = f"lor{i}_m.ps /vcps"
+        else:
+            xspec.Plot.device = "/null"
+        xspec.Plot(plottype)
+        lor_M.append(xspec.Plot.model())
+        xcm_restore(xcmfile_path)
+
+    result_array = np.array([x, xerr, data, data_err, tol_m, chisq] + lor_M).T
+    result = pd.DataFrame(
+        result_array,
+        columns=["x", "xerr", "data", "data_err", "model", "chisq"]
+        + [f"lor{i}_m" for i in range(1, lens + 1)],
+    )
+
+    # 将结果保存成csv文件
+    if savefmt:
+        filename_lst = re.findall(savefmt, xcmfile_path)[-1]
+    else:
+        try:
+            filename_lst = re.findall(
+                r"P\d{12,}_(\w{2}).*(_[\.\-0-9]*keV).*", xcmfile_path
+            )[-1]
+        except:
+            filename_lst = os.path.basename(xcmfile_path).split("_")[0]
+    print(filename_lst)
+    if isinstance(filename_lst, (list, tuple)):
+        filename_lst = [i for i in filename_lst if i.strip() != ""]
+        filename_prefix = "_".join(filename_lst)
+        filename = "".join(filename_prefix) + ".csv"
+    else:
+        print(type(filename_lst))
+        filename = filename_lst + ".csv"
+    print(filename)
+    if savecsv:
+        result.to_csv(filename)
+
+    return result
 
 
 def plotpds_detile(

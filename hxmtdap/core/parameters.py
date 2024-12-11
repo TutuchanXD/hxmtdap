@@ -188,7 +188,7 @@ class DefaultName:  # TODO 应该将输出路径和文件名分开
 
     def menetlcgen(self, minE, maxE, timedel):
         self.make_dirs_lc("ME")
-        outfilename = f"{self.expID}_ME_net_{minE}_{maxE}keV_{timedel}Bin.lc"
+        outfilename = f"{self.expID}_ME_net_{minE}-{maxE}keV_{timedel}Bin.lc"
         outfile = pathjoin(self.lc, "ME", "net", outfilename)
         return {"outfile": outfile}
 
@@ -262,7 +262,7 @@ class DefaultName:  # TODO 应该将输出路径和文件名分开
 
     def henetlcgen(self, minE, maxE, timedel):
         self.make_dirs_lc("HE")
-        outfilename = f"{self.expID}_HE_net_{minE}_{maxE}keV_{timedel}Bin.lc"
+        outfilename = f"{self.expID}_HE_net_{minE}-{maxE}keV_{timedel}Bin.lc"
         outfile = pathjoin(self.lc, "HE", "net", outfilename)
         return {"outfile": outfile}
 
@@ -809,8 +809,8 @@ class MEParameters(BaseParameters):
             "binsize": self.default_parameters["melcgen"]["binsize"],
             "starttime": self.default_parameters["melcgen"]["starttime"],
             "stoptime": self.default_parameters["melcgen"]["stoptime"],
-            "minPI": self.default_parameters["melcgen"]["minPI"],
-            "maxPI": self.default_parameters["melcgen"]["maxPI"],
+            "minPI": minPI,
+            "maxPI": maxPI,
             "deadcorr": self.default_parameters["melcgen"]["deadcorr"],
             "clobber": self.default_parameters["melcgen"]["clobber"],
         }
