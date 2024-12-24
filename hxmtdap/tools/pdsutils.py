@@ -555,15 +555,15 @@ def get_allpdsdata_fromxcm(xcmfile=None, savecsv=False, plottype="euf", savefmt=
 
 
 def plotpds_detile(
-    csvfile,
+    pdsdataframe,
     onlydata=False,
 ):
     """
     已废弃，用hxmt/pipeline/pdsutil.py中的plotpds替代
     """
-    d = pd.read_csv(csvfile)
-    title = os.path.basename(csvfile).split(".")[0]
-    savepath = os.path.dirname(csvfile) + f"/{title}.pdf"
+    d = pdsdataframe
+    # title = os.path.basename(csvfile).split(".")[0]
+    # savepath = os.path.dirname(csvfile) + f"/{title}.pdf"
     x = d["x"]
     xerr = d["xerr"]
     data = d["data"]
@@ -628,10 +628,10 @@ def plotpds_detile(
     )
     ax1.set_ylabel(r"$Power\times Frequency (rms^2\times Hz)$", fontsize=17)
     # ax1.set_ylabel('rms', fontsize=25)
-    ax1.set_title(
-        title,
-        fontsize=25,
-    )
+    # ax1.set_title(
+    #     title,
+    #     fontsize=25,
+    # )
 
     ax2 = fig.add_axes([0, 0] + [1, 0.4], sharex=ax1)
     ax2.tick_params(axis="both", which="both", direction="in", top=True, right=True)
@@ -640,6 +640,6 @@ def plotpds_detile(
     ax2.set_xlabel("Frequency (Hz)", fontsize=25)
     ax2.set_ylabel(r"$\Delta \chi^2$", fontsize=25)
 
-    fig.savefig(savepath, bbox_inches="tight")
+    # fig.savefig(savepath, bbox_inches="tight")
 
     return

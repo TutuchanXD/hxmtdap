@@ -216,6 +216,8 @@ class LogDataResolver:
         self.model_used = ""
         self.extract_data()
 
+        self.xcmfile = None
+
     @staticmethod
     def from_xcmfile(xcmfile, prexcmfile=None):
         """
@@ -247,7 +249,9 @@ class LogDataResolver:
         if target_path:
             os.chdir(nowpath)
 
-        return LogDataResolver(logfile)
+        loger = LogDataResolver(logfile)
+        loger.xcmfile = xcmfile
+        return loger
 
     def extract_data(self):
 
@@ -477,6 +481,11 @@ class LogDataResolver:
         """
         统计功率谱拟合结果，会从MCMC文件中读取误差
         """
+        # 如果当前目录有同前缀mcmcfile会自动指定
+        if not bool(mcmcfile):
+            fmcmcfile = self.logfile.replace(".log", ".fits")
+            if os.path.exists(fmcmcfile):
+                mcmcfile = fmcmcfile
 
         lorentz_dict = {}
         powerlaw_dict = {}
@@ -714,6 +723,60 @@ class LogDataResolver:
         return lorentz_allpd, powerlaw_allpd
 
 
+def filter_bln(
+    pdsres,
+    comptypes=["flat_noise", "peak_noise"],
+    columns=["nvmax", "rms", "comptype"],
+    ignore_index=None,
+    nums=4,
+    multi=False,
+):
+    """
+    返回BLN拟合结果
+
+    参数：
+        pdsres (pd.DataFrame): 输入的 DataFrame。
+        comptypes (list): 需要筛选的 comptype 值列表，默认 ["flat_noise", "peak_noise"]。
+        columns (list): 模糊匹配列名的关键字列表。
+        nums (int): 如果筛选后行数大于 nums，则保留 Width 列值最大的 nums 行，默认 4。
+        multi (bool): 是否返回多层索引格式，默认 False。
+        ignore_index (int): 如果不为 None 且为 int，则忽略原始 DataFrame 中第 ignore_index 行，默认 None。
+
+    返回：
+        pd.DataFrame: 处理后的结果。
+    """
+    # 忽略指定行
+    if ignore_index is not None and isinstance(ignore_index, int):
+        if ignore_index < 0 or ignore_index >= len(pdsres):
+            raise IndexError(f"ignore_index 超出范围: {ignore_index}")
+        pdsres = pdsres.drop(pdsres.index[ignore_index])
+
+    filtered = pdsres[pdsres["comptype"].isin(comptypes)]
+
+    if nums is not None and len(filtered) > nums:
+        if "Width" not in filtered.columns:
+            raise ValueError("DataFrame 中缺少 'Width' 列，无法根据其值进行筛选。")
+        filtered["Width"] = filtered["Width"].astype(float)
+        filtered = filtered.nlargest(nums, "Width")  # 按 Width 列降序选取前 nums 行
+
+    sorted = filtered.sort_values(by="nvmax", ascending=True)  # .reset_index(drop=True)
+
+    # 模糊匹配列名
+    matched_columns = [col for col in sorted.columns for key in columns if key in col]
+    matched_columns = list(dict.fromkeys(matched_columns))
+    sorted = sorted[matched_columns]
+
+    # 多层索引
+    if multi:
+        multi_index = pd.MultiIndex.from_product(
+            [sorted.index, sorted.columns], names=["row", "column"]
+        )
+        flattened_data = sorted.values.flatten()
+        sorted = pd.DataFrame([flattened_data], columns=multi_index)
+
+    return sorted
+
+
 def separate_singel_result(xcmfile, plotmod: Literal["uf", "euf"] = "euf"):
     """
     输入xcm文件的绝对路径
@@ -813,3 +876,39 @@ def generate_corner_plot(mcmcfile, percentiles=(0.05, 0.5, 0.95)):
     )
 
     return corner_plot
+
+
+def convert_data_to_xspec(x, y, savepath, fileprefix, xerr=None, yerr=None):
+    """
+    将数据转换为xspec可用的格式,
+    """
+    x = np.array(x)
+    y = np.array(y)
+    if xerr is None:
+        xerr = np.zeros_like(x)
+    else:
+        xerr = np.array(xerr)
+    if yerr is None:
+        yerr = np.zeros_like(y)
+    else:
+        yerr = np.array(yerr)
+
+    new_array = np.array([x - xerr, x + xerr, 2 * xerr * y, 2 * xerr * yerr]).T
+    with tempfile.NamedTemporaryFile(mode="w+t", delete=False, suffix=".txt") as f:
+        np.savetxt(f.name, new_array)
+
+    params = {
+        "infile": f.name,
+        "phafile": f"{savepath}/{fileprefix}.pha",
+        "rspfile": f"{savepath}/{fileprefix}.rsp",
+        "clobber": "yes",
+    }
+
+    from ..core.execute import gen_cmd_string, CommandExecutor
+
+    cmd_string = gen_cmd_string("flx2xsp", params, ktype="keyword")
+    print(cmd_string)
+    runner = CommandExecutor()
+    runner.run(cmd_string)
+
+    return f"{savepath}/{fileprefix}.pha", f"{savepath}/{fileprefix}.rsp"
