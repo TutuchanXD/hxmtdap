@@ -233,9 +233,8 @@ def plotpds(fps, rebin=0):
         ax.step(x=obj.freq, y=obj.power, where="mid")
     else:
         ax.step(x=obj.freq, y=obj.power, where="mid", color="#FA9D3A")
-        ax.errorbar(
-            x=obj.freq, y=obj.power, yerr=obj.power_err, linestyle="", color="#FA9D3A"
-        )
+        yerr = np.abs(obj.power_err)
+        ax.errorbar(x=obj.freq, y=obj.power, yerr=yerr, linestyle="", color="#FA9D3A")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("Frequency (Hz)")

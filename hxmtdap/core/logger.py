@@ -4,6 +4,7 @@ import os
 import sys
 import uuid
 import logging
+import traceback
 from io import StringIO
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
@@ -33,7 +34,7 @@ def setup_logger(
 
     # 确保日志目录存在
     if log_directory and (not os.path.exists(log_directory)):
-        os.makedirs(log_directory)
+        os.makedirs(log_directory, exist_ok=True)
 
     # 日志文件名
     if logname.endswith(".log"):
@@ -136,10 +137,13 @@ def capture_exception(logger):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                logger.error(
-                    f"An exception occurred in {func.__name__}: {e}", exe_info=True
+                tb_str = traceback.format_exception(
+                    e, value=e, tb=e.__traceback__, chain=True
                 )
-                raise
+                logger.error(
+                    f"An exception occurred in {func.__name__}: {''.join(tb_str)}",
+                )
+                raise RuntimeError(f'Error in "{func.__name__}"') from e
 
         return wrapper
 
@@ -158,10 +162,13 @@ def capture_exception_fromM(func):
         try:
             return func(self, *args, **kwargs)
         except Exception as e:
-            self.logger.error(
-                f"An exception occurred in {func.__name__}: {e}",
+            tb_str = traceback.format_exception(
+                e, value=e, tb=e.__traceback__, chain=True
             )
-            raise
+            self.logger.error(
+                f"An exception occurred in {func.__name__}: {''.join(tb_str)}",
+            )
+            raise RuntimeError(f'Error in "{func.__name__}"') from e
 
     return wrapper
 
