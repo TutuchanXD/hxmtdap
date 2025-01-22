@@ -168,6 +168,8 @@ def capture_exception_fromM(func):
             self.logger.error(
                 f"An exception occurred in {func.__name__}: {''.join(tb_str)}",
             )
+
+            # sys.exit(1) # 这里选择直接终止程序
             raise RuntimeError(f'Error in "{func.__name__}"') from e
 
     return wrapper

@@ -7,6 +7,10 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 
+class CommandExecutionError(Exception):
+    pass
+
+
 class CommandExecutor:
     """
     执行命令行的类
@@ -76,17 +80,23 @@ class CommandExecutor:
         执行指定的命令，并在执行前后处理环境变量
         """
         software = cmd_string.split()[0]
+
         ignore_output_list = [
             "flx2xsp",
         ]  # flx2xsp会输出大量空格
-        ignore_exception_list = [
+        ignore_error_exception_list = [
             "hebkgmap",
         ]  # hebkgmap使用了过时方法
-        Warning_keywords = [
-            "WARNING",
-            "Warning",
+        ignore_output_exception_list = ["grppha"]
+
+        Warning_keywords = ["WARNING", "Warning", "warning"]
+        Error_keywords = [
+            "ERROR",
+            "Error",
+            "abandon",
+            "unsuccessfully",
+            "GTI is empty!",
         ]
-        Error_keywords = ["ERROR", "Error", "abandon"]
 
         try:
             with self.console.status(
@@ -95,25 +105,35 @@ class CommandExecutor:
                 results = subprocess.run(
                     cmd_string,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stderr=subprocess.PIPE,  # 将stderr重定向到stdout
                     text=True,
                     shell=True,
                 )
-                if results.stdout and software not in ignore_output_list:
-                    self.logger.debug(results.stdout)
-                if results.stderr and software not in ignore_exception_list:
-                    if "WARNING" in results.stderr or "Warning" in results.stderr:
-                        self.logger.warning(results.stderr)
-                    elif (
-                        "ERROR" in results.stderr
-                        or "Error" in results.stderr
-                        or "abandon" in results.stderr
-                    ):
-                        self.logger.error(results.stderr)
-                        raise Exception(results.stderr)
-                    else:
-                        self.logger.error(results.stderr)
-                        raise Exception(results.stderr)
+                stdout_output = results.stdout.strip()
+
+                # 检查stderr
+                if software not in ignore_error_exception_list:
+                    if results.stderr:
+                        self.logger.error(results.stderr.strip())
+                        raise CommandExecutionError(results.stderr.strip())
+
+                # 处理stdout
+                if software in ignore_output_list:
+                    return
+                # 检查错误关键字
+                if software not in ignore_output_exception_list:
+                    if any(keys in stdout_output for keys in Error_keywords):
+                        self.logger.error(stdout_output)
+                        raise CommandExecutionError(stdout_output)
+                # 检查警告关键字
+                elif any(keys in stdout_output for keys in Warning_keywords):
+                    self.logger.warning(stdout_output)
+                    return
+                # 返回调试信息
+                else:
+                    self.logger.debug(stdout_output)
+                    return
+
         finally:
             if self.environment == "Jupyter":
                 self.restore_environment()

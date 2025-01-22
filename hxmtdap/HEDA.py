@@ -1,6 +1,8 @@
 from datetime import datetime
 import logging
 import panel as pn
+import multiprocessing
+import gc
 
 from matplotlib import pyplot as plt
 
@@ -89,6 +91,17 @@ class HEBasePipeline(object):
         self.Parameters = self.Service.get_parameters()
         self.runner = self.Service.get_runner()
         self.commander = self.Service.get_commander()
+
+        self.fig_processes = []
+
+    def save_figure(self, output, plot_func):
+        try:
+            fig, _ = plot_func(output)
+            fig.savefig(f"{output}.png")
+            plt.clf()
+            plt.close(fig)
+        except Exception as e:
+            self.logger.error(f"Failed to save figure: {e}")
 
 
 class HEScreenPipeline(HEBasePipeline):
@@ -199,9 +212,11 @@ class HEScreenPipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotpds_from_evt(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotpds_from_evt)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
 
@@ -250,9 +265,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotlc(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotlc)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -286,9 +303,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotbkg(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotbkg)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -327,9 +346,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotlc(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotlc)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -377,9 +398,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotpds(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotpds)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -427,14 +450,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotpds(output)
-            try:
-                fig.savefig(f"{output}.png")
-                plt.close(fig)
-            except OverflowError:
-                self.logger.warning(f"OverflowError when saving {output}.png")
-            del fig, _
-
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotpds)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
 
@@ -595,3 +615,7 @@ class HEDA(HEScreenPipeline, HELightcurvePipeline, HESpectrumPipeline):
 
         self._is_closed = True
         del self.logger
+
+        for p in self.fig_processes:
+            p.join()
+        gc.collect()

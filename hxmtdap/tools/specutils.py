@@ -4,6 +4,31 @@ import re
 import numpy as np
 from scipy.integrate import quad
 from astropy.io import fits
+from astropy.time import Time
+
+
+def get_exposure_from_pha(phafile):
+    """
+    从PHA文件中提取曝光时间
+    """
+    with fits.open(phafile) as hdulist:
+        exposure = hdulist[1].header["EXPOSURE"]
+    return exposure
+
+
+def get_mjdtime_from_pha(phafile):
+    """
+    从PHA文件中提取MJD时间
+    """
+    with fits.open(phafile) as hdulist:
+        dstart = hdulist[1].header["DATE-OBS"]
+        dstop = hdulist[1].header["DATE-END"]
+
+    mstart = Time(dstart).mjd
+    mstop = Time(dstop).mjd
+    mjdtime = (mstart + mstop) / 2
+    mjderr = (mstop - mstart) / 2
+    return mjdtime, mjderr
 
 
 def power_law_model(E, K, alpha):

@@ -1,6 +1,8 @@
 import os
 import re
+import gc
 import time
+import tempfile
 from typing import Literal
 
 import stingray
@@ -37,6 +39,7 @@ mpl.rcParams["ytick.minor.width"] = 1.6
 mpl.rcParams["xtick.labelsize"] = 20.0
 mpl.rcParams["ytick.labelsize"] = 20.0
 mpl.rcParams["savefig.bbox"] = "tight"
+mpl.rcParams["agg.path.chunksize"] = 10000
 
 mpl.rcParams["axes.prop_cycle"] = cycler(
     "color",
@@ -89,6 +92,82 @@ def open_pds(fps, dtype: Literal["stingray", "tuple"] = "stingray"):
 
 
 def generate_pds_from_lc(
+    mode: Literal["stingray", "powspec"] = "stingray",
+    *args,
+    **kwargs,
+):
+    if mode == "stingray":
+        res = generate_pds_from_lc_stingray(*args, **kwargs)
+    elif mode == "powspec":
+        res = generate_pds_from_lc_powspec(*args, **kwargs)
+
+    return res
+
+
+def generate_pds_from_lc_powspec(
+    lc,
+    segment=256.0,
+    rebin=0,
+    norm: Literal["leahy", "rms"] = "leahy",
+    subtracted_white_noise=False,
+    blindfps=None,
+    outfile=None,
+    logger=None,
+):
+    """
+    从光变曲线生成平均功率谱, 返回Powerspectrum对象
+    """
+    if not isinstance(lc, str):
+        raise TypeError("Powspec only support path for lcfile!")
+
+    lcobj = open_lc(lc)
+    dt = lcobj.dt
+    # 判断segment是否超过GTI最大间隔
+    gti = lcobj.gti
+    max_gti_period = np.max(gti[:, -1] - gti[:, 0])
+    while segment > max_gti_period:
+        if bool(logger):
+            logger.warning(
+                f"Segment is too large, which will be reduced to {int(segment / 2)}s!"
+            )
+        segment = segment / 2
+
+    # 功率谱
+    if outfile is None:
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".fps", mode="w+")
+        outfile = temp_file.name
+
+    if norm == "leahy":
+        if subtracted_white_noise:
+            normalization = -1
+        else:
+            normalization = 1
+    elif norm == "rms":
+        if subtracted_white_noise:
+            normalization = -2
+        else:
+            normalization = 2
+
+    parameters = {
+        "cfile1": lc,
+        "window": "-",
+        "normalization": normalization,
+        "dtnb": dt,  # 最短时间间隔
+        "nbint": int((1 / dt) * segment),  # 最长时间间隔
+        "nintfm": "INDEF",
+        "rebin": rebin,
+        "outfile": outfile,
+        "clobber": "yes",
+        "plot": "no",
+    }
+    cmd_string = gen_cmd_string("powspec", parameters, ktype="keyword")
+    runner = CommandExecutor(logger=logger)
+    runner.run(cmd_string)
+
+    return outfile
+
+
+def generate_pds_from_lc_stingray(
     lc,
     segment=256.0,
     rebin=0,
@@ -98,7 +177,7 @@ def generate_pds_from_lc(
     logger=None,
 ):
     """
-    从光变曲线生成平均功率谱，返回Powerspectrum对象
+    从光变曲线生成平均功率谱, 返回Powerspectrum对象
     """
     lcobj = open_lc(lc)
     meanrate = lcobj.meanrate
@@ -144,11 +223,19 @@ def generate_pds_from_lc(
         elif norm == "rms":
             raise Exception("RMS normalization must be subtracted white noise!")
 
+    del lcobj
+    gc.collect()
     return pdsobj
 
 
-def subtracted_white_noise_pds(fps, meanrate=None, norm="leahy", blindfps=None):
+def subtracted_white_noise_pds(
+    fps,
+    meanrate=None,
+    norm: Literal["leahy", "rms"] = "leahy",
+    blindfps=None,
+):
     """
+    归一化功率谱, 并减去白噪声
     仅支持输入leahy归一的功率谱
     """
     pdsobj = open_pds(fps)
@@ -175,9 +262,9 @@ def subtracted_white_noise_pds(fps, meanrate=None, norm="leahy", blindfps=None):
 
 def rebin_pds(fps, rebin):
     """
-    重分箱功率谱，返回Powerspectrum对象
-    当rebin大于0时， 为线性分箱； 当rebin小于0时， 为对数分箱；
-    当rebin的绝对值大于1时，为POWERSPEC格式
+    重分箱功率谱, 返回Powerspectrum对象
+    当rebin大于0时,  为线性分箱； 当rebin小于0时,  为对数分箱；
+    当rebin的绝对值大于1时, 为POWERSPEC格式
     """
     pdsobj = open_pds(fps)
 
@@ -195,9 +282,9 @@ def rebin_pds(fps, rebin):
     return pdsobj
 
 
-def plotpds(fps, rebin=0):
+def plotpds(fps, rebin=0, clean=True):
     """
-    绘制功率谱， 返回(fig,ax)
+    绘制功率谱,  返回(fig,ax)
     """
     obj = open_pds(fps, dtype="stingray")
 
@@ -256,14 +343,20 @@ def plotpds(fps, rebin=0):
     else:
         y_lower = np.min(obj.power) - obj.power_err[np.argmin(obj.power)]
         y_upper = np.max(obj.power) + obj.power_err[np.argmax(obj.power)]
-        ax.set_ylim(y_lower, y_upper)
+    if y_lower < 0:
+        y_lower = 0
+    ax.set_ylim(y_lower, y_upper)
+
+    if clean is True:
+        del obj.power, obj
+        gc.collect()
 
     return fig, ax
 
 
 def meanpds(*pdsfiles, method: Literal["hdul", "tb"] = "hdul"):
     """
-    输入多个功率谱文件，生成他们的平均功率谱
+    输入多个功率谱文件, 生成他们的平均功率谱
     """
     all_powers = []
     pdsobj = fits.open(pdsfiles[0])
@@ -330,7 +423,7 @@ def meanpds_name_gen(*fpses):
 
 def calculate_rms(x, *y, fmt="euf"):
     """
-    计算模型的RMS；如果传入多个模型，将计算最大轮廓的RMS
+    计算模型的RMS；如果传入多个模型, 将计算最大轮廓的RMS
     """
     ay = np.maximum(y)
     if fmt == "euf":
@@ -341,12 +434,11 @@ def calculate_rms(x, *y, fmt="euf"):
         raise ValueError("Unknown fmt: {}".format(fmt))
 
 
-def save_as_file(
-    fps,
-    filename="output.fps",
-):
+def save_as_file(fps, filename="output.fps", savebins: bool = True):
     """
     将 PowerSpectrum 保存为标准fits文件
+
+    - savebins 是否保留每个功率处Bin的数量
     """
     pds = open_pds(fps)
     # 计算频率误差 XAX_E
@@ -360,7 +452,15 @@ def save_as_file(
     col3 = fits.Column(name="POWER", format="D", array=pds.power)
     col4 = fits.Column(name="ERROR", format="D", array=pds.power_err)
 
-    cols = fits.ColDefs([col1, col2, col3, col4])
+    #
+    if not savebins:
+        cols = fits.ColDefs([col1, col2, col3, col4])
+    else:
+        if isinstance(pds.m, (int, float)):
+            cols = fits.ColDefs([col1, col2, col3, col4])
+        elif isinstance(pds.m, np.ndarray) and (pds.m.shape == pds.freq.shape):
+            col5 = fits.Column(name="MW", format="D", array=pds.m)
+            cols = fits.ColDefs([col1, col2, col3, col4, col5])
     hdu = fits.BinTableHDU.from_columns(cols)
     hdu.name = "RESULTS"
 
@@ -397,11 +497,13 @@ def save_as_file(
     hdul = fits.HDUList([primary_hdu, hdu])
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     hdul.writeto(filename, overwrite=True)
+    del hdul
 
     print(f"Power spectrum saved as {filename}")
+    return
 
 
-def fps2xsp(fpsfile):
+def fps2xsp(fpsfile, logger=None):
     """
     将fps转化为xspec可读的形式
     """
@@ -436,8 +538,8 @@ def fps2xsp(fpsfile):
         "clobber": "yes",
     }
     cmd_string = gen_cmd_string("flx2xsp", params, ktype="keyword")
-    print(cmd_string)
-    runner = CommandExecutor()
+    # print(cmd_string)
+    runner = CommandExecutor(logger=logger)
     runner.run(cmd_string)
 
     os.chdir(pwd)
@@ -446,7 +548,7 @@ def fps2xsp(fpsfile):
 
 def get_allpdsdata_fromxcm(xcmfile=None, savecsv=False, plottype="euf", savefmt=None):
     """
-    输入xcm文件完整路径，返回绘图数据DataFrame
+    输入xcm文件完整路径, 返回绘图数据DataFrame
     """
 
     def xcm_restore(xcmfile):
@@ -558,7 +660,7 @@ def plotpds_detile(
     onlydata=False,
 ):
     """
-    已废弃，用hxmt/pipeline/pdsutil.py中的plotpds替代
+    已废弃, 用hxmt/pipeline/pdsutil.py中的plotpds替代
     """
     d = pdsdataframe
     # title = os.path.basename(csvfile).split(".")[0]

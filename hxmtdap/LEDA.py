@@ -2,8 +2,10 @@ from datetime import datetime
 import panel as pn
 from typing import Literal
 import logging
+import multiprocessing
+import gc
 
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 
 from .core.command import HXMTCommande
 from .core.execute import CommandExecutor
@@ -15,6 +17,8 @@ from .core.status import LEStatus
 from .tools.evtutils import plotpds_from_evt
 from .tools.lcutils import plotlc, plotbkg
 from .tools.pdsutils import plotpds
+
+from memory_profiler import profile
 
 
 class LEService(object):
@@ -92,6 +96,17 @@ class LEBasePipeline(object):
         self.Parameters = self.Service.get_parameters()
         self.runner = self.Service.get_runner()
         self.commander = self.Service.get_commander()
+
+        self.fig_processes = []
+
+    def save_figure(self, output, plot_func):
+        try:
+            fig, _ = plot_func(output)
+            fig.savefig(f"{output}.png")
+            plt.clf()
+            plt.close(fig)
+        except Exception as e:
+            self.logger.error(f"Failed to save figure: {e}")
 
 
 class LEScreenPipeline(LEBasePipeline):
@@ -203,7 +218,7 @@ class LEScreenPipeline(LEBasePipeline):
             return output
 
     @capture_exception_fromM
-    def legticorr(self, mode: Literal["import", "command"] = "import", **kwargs):
+    def legticorr(self, mode: Literal["import", "command"] = "command", **kwargs):
         available = self.status.determine_available_commands("legticorr")
         if not available:
             self.logger.warning(f"The pre-tasks are not completed.")
@@ -265,13 +280,17 @@ class LEScreenPipeline(LEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotpds_from_evt(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotpds_from_evt)
+            )
+            self.fig_processes.append(process)
+            process.start()
+
             return output
 
 
 class LELightcurvePipeline(LEBasePipeline):
+
     def __init__(self, exppath, logger_level="INFO"):
         super().__init__(exppath, logger_level)
         self._initialization()
@@ -316,9 +335,11 @@ class LELightcurvePipeline(LEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotlc(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotlc)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -352,9 +373,11 @@ class LELightcurvePipeline(LEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotbkg(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotbkg)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -393,9 +416,11 @@ class LELightcurvePipeline(LEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotlc(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotlc)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -443,9 +468,11 @@ class LELightcurvePipeline(LEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotpds(output)
-            fig.savefig(f"{output}.png")
-            plt.close(fig)
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotpds)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
     @capture_exception_fromM
@@ -493,18 +520,16 @@ class LELightcurvePipeline(LEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            fig, _ = plotpds(output)
-            try:
-                fig.savefig(f"{output}.png")
-                plt.close(fig)
-            except OverflowError:
-                self.logger.warning(f"OverflowError when saving {output}.png")
-            del fig, _
-
+            process = multiprocessing.Process(
+                target=self.save_figure, args=(output, plotpds)
+            )
+            self.fig_processes.append(process)
+            process.start()
             return output
 
 
 class LESpectrumPipeline(LEBasePipeline):
+
     def __init__(self, exppath, logger_level="INFO"):
         super().__init__(exppath, logger_level)
         self._initialization()
@@ -515,6 +540,7 @@ class LESpectrumPipeline(LEBasePipeline):
     def _initialization(self):
         pass
 
+    @capture_exception_fromM
     def lespecgen(self, node="LE_spec", **kwargs):
         # 允许直接传入 minE和maxE
         available = self.status.determine_available_ext("lespecgen")
@@ -549,6 +575,7 @@ class LESpectrumPipeline(LEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
             return output
 
+    @capture_exception_fromM
     def lerspgen(self, node="LE_rsp", **kwargs):
         available = self.status.determine_available_ext("lerspgen")
         if not available:
@@ -644,6 +671,7 @@ class LESpectrumPipeline(LEBasePipeline):
 
 
 class LEDA(LEScreenPipeline, LELightcurvePipeline, LESpectrumPipeline):
+
     def __init__(self, exppath, logger_level="INFO"):
         LEBasePipeline.__init__(self, exppath, logger_level)
         self.logger.info(f"LEDA initialized.")
@@ -662,3 +690,7 @@ class LEDA(LEScreenPipeline, LELightcurvePipeline, LESpectrumPipeline):
 
         self._is_closed = True
         del self.logger
+
+        for p in self.fig_processes:
+            p.join()
+        gc.collect()

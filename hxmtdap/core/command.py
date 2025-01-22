@@ -1,3 +1,4 @@
+import gc
 import inspect
 import json
 import logging
@@ -214,7 +215,7 @@ class HXMTCommande:
     ):
         # ^ 先生成功率谱再传递参数列表，因为segment可能会变
         pdsnet_obj = generate_pds_from_lc(
-            lcnet,
+            lc=lcnet,
             segment=segment,
             rebin=rebin,
             norm=norm,
@@ -236,8 +237,9 @@ class HXMTCommande:
         Parameters.update({"outfile": outfile})
 
         savepds(pdsnet_obj, filename=outfile)
-        fps2xsp(fpsfile=outfile)
-        del pdsnet_obj
+        fps2xsp(fpsfile=outfile, logger=logger)
+        del pdsnet_obj.power, pdsnet_obj
+        gc.collect()
         return Parameters, (lcnet,)
 
     @staticmethod
@@ -252,7 +254,7 @@ class HXMTCommande:
     ):
         # ^ 先生成功率谱再传递参数列表，因为segment可能会变
         pdsrms_obj = generate_pds_from_lc(
-            lcnet,
+            lc=lcnet,
             segment=segment,
             rebin=rebin,
             norm=norm,
@@ -275,8 +277,9 @@ class HXMTCommande:
         Parameters.update({"outfile": outfile})
 
         savepds(pdsrms_obj, filename=outfile)
-        fps2xsp(fpsfile=outfile)
-        del pdsrms_obj
+        fps2xsp(fpsfile=outfile, logger=logger)
+        del pdsrms_obj.power, pdsrms_obj
+        gc.collect()
         return Parameters, (lcnet,)
 
     @staticmethod
@@ -529,7 +532,7 @@ class HXMTCommande:
         logger=None,
     ):
         pdsnet_obj = generate_pds_from_lc(
-            lcnet,
+            lc=lcnet,
             segment=segment,
             rebin=rebin,
             norm=norm,
@@ -552,8 +555,9 @@ class HXMTCommande:
         Parameters.update({"outfile": outfile})
 
         savepds(pdsnet_obj, filename=outfile)
-        fps2xsp(fpsfile=outfile)
-        del pdsnet_obj
+        fps2xsp(fpsfile=outfile, logger=logger)
+        del pdsnet_obj.power, pdsnet_obj
+        gc.collect()
         return Parameters, (lcnet,)
 
     @staticmethod
@@ -567,7 +571,7 @@ class HXMTCommande:
         logger=None,
     ):
         pdsrms_obj = generate_pds_from_lc(
-            lcnet,
+            lc=lcnet,
             segment=segment,
             rebin=rebin,
             norm=norm,
@@ -590,8 +594,9 @@ class HXMTCommande:
         Parameters.update({"outfile": outfile})
 
         savepds(pdsrms_obj, filename=outfile)
-        fps2xsp(fpsfile=outfile)
-        del pdsrms_obj
+        fps2xsp(fpsfile=outfile, logger=logger)
+        del pdsrms_obj.power, pdsrms_obj
+        gc.collect()
         return Parameters, (lcnet,)
 
     @staticmethod
@@ -783,7 +788,7 @@ class HXMTCommande:
         logger=None,
     ):
         pdsnet_obj = generate_pds_from_lc(
-            lcnet,
+            lc=lcnet,
             segment=segment,
             rebin=rebin,
             norm=norm,
@@ -806,8 +811,9 @@ class HXMTCommande:
         Parameters.update({"outfile": outfile})
 
         savepds(pdsnet_obj, filename=outfile)
-        fps2xsp(fpsfile=outfile)
-        del pdsnet_obj
+        fps2xsp(fpsfile=outfile, logger=logger)
+        del pdsnet_obj.power, pdsnet_obj
+        gc.collect()
         return Parameters, (lcnet,)
 
     @staticmethod
@@ -821,7 +827,7 @@ class HXMTCommande:
         logger=None,
     ):
         pdsrms_obj = generate_pds_from_lc(
-            lcnet,
+            lc=lcnet,
             segment=segment,
             rebin=rebin,
             norm=norm,
@@ -844,8 +850,9 @@ class HXMTCommande:
         Parameters.update({"outfile": outfile})
 
         savepds(pdsrms_obj, filename=outfile)
-        fps2xsp(fpsfile=outfile)
-        del pdsrms_obj
+        fps2xsp(fpsfile=outfile, logger=logger)
+        del pdsrms_obj.power, pdsrms_obj
+        gc.collect()
         return Parameters, (lcnet,)
 
     @staticmethod
