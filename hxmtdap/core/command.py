@@ -950,22 +950,79 @@ class HXMTCommande:
         return Parameters, cmd_string, (infile, respfile, backfile)
 
     @staticmethod
-    def ftgrouppha(infile, respfile, outfile, grouptype="opt", clobber="yes", **kwargs):
+    def ftgrouppha(
+        infile,
+        respfile,
+        backfile,
+        outfile,
+        group=None,  # 为了与grppha方法兼容
+        grouptype="opt",
+        groupscale=None,
+        rows="-",
+        clobber="yes",
+        **kwargs,
+    ):
+        """
+        grouptype 参数说明:
+            1. "bmin":
+            - 含义: 根据背景文件中每个 bin 的最小计数设置分组。
+            - groupscale: 指定每个 bin 的最小计数。
+            - 示例: 每个分组在背景文件中至少有 groupscale 个计数。
+
+            2. "constant":
+            - 含义: 按固定因子均匀分组。
+            - groupscale: 指定分组因子（例如，groupscale=2 表示每两个通道合并为一个 bin）。
+            - 示例: 在 xspec 中按固定因子（如 2）分组。
+
+            3. "min":
+            - 含义: 根据输入文件中每个 bin 的最小计数设置分组。
+            - groupscale: 指定每个 bin 的最小计数。
+            - 示例: 每个分组至少有 groupscale 个计数。
+
+            4. "snmin":
+            - 含义: 根据背景扣除后的信噪比（S/N）设置分组。
+            - groupscale: 指定每个 bin 的最小信噪比。
+            - 示例: 每个分组的背景扣除后信噪比至少为 groupscale。
+
+            5. "opt": (默认)
+            - 含义: 使用 Kaastra & Bleeker (2016) 提出的最优分组方案。
+            - groupscale: 无直接作用（此模式忽略 groupscale）。
+            - 注意: 忽略 minchannel 和 maxchannel 设置。
+            - 示例: 根据最优算法分组，通常用于高统计数据。
+
+            6. "optmin":
+            - 含义: 结合 "opt" 和 "min"，使用 Kaastra & Bleeker 最优分组，同时要求最小计数。
+            - groupscale: 指定每个 bin 的最小计数。
+            - 示例: 最优分组且每个 bin 至少有 groupscale 个计数。
+
+            7. "optsnmin":
+            - 含义: 结合 "opt" 和 "snmin"，使用 Kaastra & Bleeker 最优分组，同时要求最小信噪比。
+            - groupscale: 指定每个 bin 的最小信噪比。
+            - 示例: 最优分组且每个 bin 的背景扣除后信噪比至少为 groupscale。
+
+            8. "file":
+            - 含义: 从模板文件中读取 GROUPING 列。
+            - groupscale: 无作用。
+            - 额外参数: 需要 templatefile（模板谱文件）。
+            - 示例: 将 templatefile 的分组应用到输入文件。
+        """
         RequiredParameters = {
             "infile": infile,
+            "respfile": respfile,
+            "backfile": backfile,
             "outfile": outfile,
             "grouptype": grouptype,
-            "respfile": respfile,
+            "groupscale": groupscale,
+            "rows": rows,
             "clobber": clobber,
         }
         Parameters = RequiredParameters.copy()
-        otherkwargs_string = " ".join(f"{key}='{value}'" for key, value in kwargs)
-        cmd_string = (
-            f"ftgrouppha infile='{infile}' respfile='{respfile}' outfile='{outfile}' grouptype='{grouptype}' clobber='{clobber}' "
-            + otherkwargs_string
+
+        return (
+            Parameters,
+            gen_cmd_string("ftgrouppha", Parameters),
+            (infile, respfile, backfile),
         )
-        # TODO 把这里补全
-        return Parameters, cmd_string, (infile, respfile)
 
 
 def params_to_json(cls):

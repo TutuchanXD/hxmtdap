@@ -449,7 +449,7 @@ class LEParameters(BaseParameters):
             "evtfile": self.get(self.recoder.status["screen"]),
             "outfile": self.dner.lelcgen(minE=minE, maxE=maxE, timedel=timedel)[
                 "outfile_prefix"
-            ],
+            ],  # 仅传入前缀
             "userdetid": self.default_parameters["lelcgen"]["userdetid"],
             "binsize": self.default_parameters["lelcgen"]["binsize"],
             "starttime": self.default_parameters["lelcgen"]["starttime"],
@@ -679,12 +679,39 @@ class LEParameters(BaseParameters):
         minE = self.recoder.get_graph()[specnode]["minE"]
         maxE = self.recoder.get_graph()[specnode]["maxE"]
 
+        respfile_basename = os.path.basename(self.get(self.recoder.status["rsp"]))
+        backfile_basename = os.path.basename(self.get(self.recoder.status["specbkg"]))
+
         default_parameters = {
             "infile": specfile,
             "outfile": self.dner.grppha_le(minE, maxE)["outfile"],
             "group": "min 20",
-            "respfile": self.get(self.recoder.status["rsp"]),
-            "backfile": self.get(self.recoder.status["specbkg"]),
+            "respfile": respfile_basename,
+            "backfile": backfile_basename,
+            "clobber": "yes",
+        }
+        default_parameters = update_parameters(default_parameters, **kwargs)
+        return default_parameters
+
+    def ftgrouppha_le(self, **kwargs):
+        specnode = self.recoder.status["spec"]
+        specfile = self.get(node_name=specnode)
+
+        # 能段信息从spec中获取
+        minE = self.recoder.get_graph()[specnode]["minE"]
+        maxE = self.recoder.get_graph()[specnode]["maxE"]
+
+        respfile_basename = self.get(self.recoder.status["rsp"])
+        backfile_basename = self.get(self.recoder.status["specbkg"])
+
+        default_parameters = {
+            "infile": specfile,
+            "respfile": respfile_basename,
+            "backfile": backfile_basename,
+            "outfile": self.dner.grppha_le(minE, maxE)["outfile"],
+            "grouptype": "opt",
+            "groupscale": 20,
+            "rows": "-",
             "clobber": "yes",
         }
         default_parameters = update_parameters(default_parameters, **kwargs)
@@ -1025,12 +1052,39 @@ class MEParameters(BaseParameters):
         minE = self.recoder.get_graph()[specnode]["minE"]
         maxE = self.recoder.get_graph()[specnode]["maxE"]
 
+        respfile_basename = os.path.basename(self.get(self.recoder.status["rsp"]))
+        backfile_basename = os.path.basename(self.get(self.recoder.status["specbkg"]))
+
         default_parameters = {
             "infile": specfile,
             "outfile": self.dner.grppha_me(minE, maxE)["outfile"],
             "group": "min 20",
-            "respfile": self.get(self.recoder.status["rsp"]),
-            "backfile": self.get(self.recoder.status["specbkg"]),
+            "respfile": respfile_basename,
+            "backfile": backfile_basename,
+            "clobber": "yes",
+        }
+        default_parameters = update_parameters(default_parameters, **kwargs)
+        return default_parameters
+
+    def ftgrouppha_me(self, **kwargs):
+        specnode = self.recoder.status["spec"]
+        specfile = self.get(node_name=specnode)
+
+        # 能段信息从spec中获取
+        minE = self.recoder.get_graph()[specnode]["minE"]
+        maxE = self.recoder.get_graph()[specnode]["maxE"]
+
+        respfile_basename = self.get(self.recoder.status["rsp"])
+        backfile_basename = self.get(self.recoder.status["specbkg"])
+
+        default_parameters = {
+            "infile": specfile,
+            "respfile": respfile_basename,
+            "backfile": backfile_basename,
+            "outfile": self.dner.grppha_me(minE, maxE)["outfile"],
+            "grouptype": "opt",
+            "groupscale": 20,
+            "rows": "-",
             "clobber": "yes",
         }
         default_parameters = update_parameters(default_parameters, **kwargs)
@@ -1343,12 +1397,39 @@ class HEParameters(BaseParameters):
         minE = self.recoder.get_graph()[specnode]["minE"]
         maxE = self.recoder.get_graph()[specnode]["maxE"]
 
+        respfile_basename = os.path.basename(self.get(self.recoder.status["rsp"]))
+        backfile_basename = os.path.basename(self.get(self.recoder.status["specbkg"]))
+
         default_parameters = {
             "infile": specfile,
             "outfile": self.dner.grppha_he(minE, maxE)["outfile"],
             "group": "min 20",
-            "respfile": self.get(self.recoder.status["rsp"]),
-            "backfile": self.get(self.recoder.status["specbkg"]),
+            "respfile": respfile_basename,
+            "backfile": backfile_basename,
+            "clobber": "yes",
+        }
+        default_parameters = update_parameters(default_parameters, **kwargs)
+        return default_parameters
+
+    def ftgrouppha_he(self, **kwargs):
+        specnode = self.recoder.status["spec"]
+        specfile = self.get(node_name=specnode)
+
+        # 能段信息从spec中获取
+        minE = self.recoder.get_graph()[specnode]["minE"]
+        maxE = self.recoder.get_graph()[specnode]["maxE"]
+
+        respfile_basename = self.get(self.recoder.status["rsp"])
+        backfile_basename = self.get(self.recoder.status["specbkg"])
+
+        default_parameters = {
+            "infile": specfile,
+            "respfile": respfile_basename,
+            "backfile": backfile_basename,
+            "outfile": self.dner.grppha_he(minE, maxE)["outfile"],
+            "grouptype": "opt",
+            "groupscale": 20,
+            "rows": "-",
             "clobber": "yes",
         }
         default_parameters = update_parameters(default_parameters, **kwargs)

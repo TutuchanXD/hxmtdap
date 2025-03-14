@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+from typing import Literal
 import panel as pn
 import multiprocessing
 import gc
@@ -26,12 +27,15 @@ class HEService(object):
     def __new__(cls, exppath, *args, **kwargs):
         return super(HEService, cls).__new__(cls)
 
-    def __init__(self, exppath) -> None:
-        self.initialize(exppath)
+    def __init__(self, exppath, logger_dir) -> None:
+        self.initialize(exppath, logger_dir)
 
-    def initialize(self, exppath):
+    def initialize(self, exppath, logger_dir):
         self.exppath = exppath
-        self.logger = setup_logger("HXMTDAS_HE", log_directory=f"{exppath}/log")
+        if logger_dir is None:
+            self.logger = setup_logger("HXMTDAS_HE", log_directory=f"{exppath}/log")
+        else:
+            self.logger = setup_logger("HXMTDAS_HE", log_directory=logger_dir)
         self.check_exp_path(exppath)
 
         self.recoder = HERecoder(
@@ -76,9 +80,8 @@ class HEService(object):
 
 class HEBasePipeline(object):
 
-    def __init__(self, exppath, logger_level):
-        self.Service = HEService(exppath)  # Service实例
-        self.Service.initialize(exppath)
+    def __init__(self, exppath, logger_level, logger_dir):
+        self.Service = HEService(exppath, logger_dir)  # Service实例
 
         self.exppath = exppath
 
@@ -106,8 +109,8 @@ class HEBasePipeline(object):
 
 class HEScreenPipeline(HEBasePipeline):
 
-    def __init__(self, exppath, logger_level="INFO"):
-        super().__init__(exppath, logger_level)
+    def __init__(self, exppath, logger_level="INFO", logger_dir=None):
+        super().__init__(exppath, logger_level, logger_dir)
         self._initialization()
         if logger_level != self.logger_level:
             self.logger.setLevel(logger_level)
@@ -221,8 +224,8 @@ class HEScreenPipeline(HEBasePipeline):
 
 
 class HELightcurvePipeline(HEBasePipeline):
-    def __init__(self, exppath, logger_level="INFO"):
-        super().__init__(exppath, logger_level)
+    def __init__(self, exppath, logger_level="INFO", logger_dir=None):
+        super().__init__(exppath, logger_level, logger_dir)
         self._initialization()
         if logger_level != self.logger_level:
             self.logger.setLevel(logger_level)
@@ -459,8 +462,8 @@ class HELightcurvePipeline(HEBasePipeline):
 
 
 class HESpectrumPipeline(HEBasePipeline):
-    def __init__(self, exppath, logger_level="INFO"):
-        super().__init__(exppath, logger_level)
+    def __init__(self, exppath, logger_level="INFO", logger_dir=None):
+        super().__init__(exppath, logger_level, logger_dir)
         self._initialization()
         if logger_level != self.logger_level:
             self.logger.setLevel(logger_level)
@@ -566,15 +569,24 @@ class HESpectrumPipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
             return output
 
-    def grppha_he(self, node="HE_grp", **kwargs):
+    def grppha_he(
+        self,
+        node="HE_grp",
+        mode: Literal["grppha", "ftgrouppha"] = "ftgrouppha",
+        **kwargs,
+    ):
         available = self.status.determine_available_ext("grppha_he")
         if not available:
             self.logger.warning(f"The pre-tasks are not completed.")
             return
-        defParams = self.Parameters.grppha_he(**kwargs)  # 获取默认参数
-        params, cmd_string, parents = self.commander.grppha(
-            **defParams
-        )  # 获取所有参数、命令行执行命令、父血缘数据
+        if mode == "grppha":
+            defParams = self.Parameters.grppha_he(**kwargs)  # 获取默认参数
+            params, cmd_string, parents = self.commander.grppha(
+                **defParams
+            )  # 获取所有参数、命令行执行命令、父血缘数据
+        elif mode == "ftgrouppha":
+            defParams = self.Parameters.ftgrouppha_he(**kwargs)
+            params, cmd_string, parents = self.commander.ftgrouppha(**defParams)
 
         attrs = {
             **params,
@@ -598,9 +610,10 @@ class HESpectrumPipeline(HEBasePipeline):
 
 
 class HEDA(HEScreenPipeline, HELightcurvePipeline, HESpectrumPipeline):
-    def __init__(self, exppath, logger_level="INFO"):
-        HEBasePipeline.__init__(self, exppath, logger_level)
+    def __init__(self, exppath, logger_level="INFO", logger_dir=None):
+        HEBasePipeline.__init__(self, exppath, logger_level, logger_dir=logger_dir)
         self.logger.info(f"HEDA initialized.")
+        self._is_closed = False
 
     def clean(self):
         self.logger.info(f"HEDA closed.")

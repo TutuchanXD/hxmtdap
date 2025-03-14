@@ -97,7 +97,10 @@ def open_gti(gti, ndarray=False):
             gti = None
 
         if ndarray:
-            return gti.to_numpy()
+            if gti is not None:
+                return gti.to_pandas().values
+            else:
+                return np.array([])
         else:
             return gti.to_pandas()
     elif isinstance(gti, np.ndarray):
@@ -201,10 +204,14 @@ def get_common_GTI(*gtiarray, endpoints=False):
 
     for gtiarr in gtiarray:
         # 如果输入为 numpy ndarray 或 pandas DataFrame，则转为列表
-        if isinstance(gtiarr, np.ndarray):
+        if isinstance(gtiarr, list):
+            pass
+        elif isinstance(gtiarr, np.ndarray):
             gtiarr = gtiarr.tolist()
         elif isinstance(gtiarr, pd.DataFrame):
             gtiarr = gtiarr.values.tolist()
+        elif isinstance(gtiarr, None):
+            continue
 
         # 先处理单次GTI
         now_gti_set = None
@@ -222,7 +229,10 @@ def get_common_GTI(*gtiarray, endpoints=False):
         if gti_set is None:
             gti_set = now_gti_set
         else:
-            gti_set &= now_gti_set
+            if now_gti_set is None:
+                continue
+            else:
+                gti_set &= now_gti_set
 
     # 如果没有交集，返回空数组
     if gti_set is None or gti_set.empty:
@@ -249,10 +259,14 @@ def get_union_gti(*gtiarray):
 
     for gtiarr in gtiarray:
         # 如果输入为 numpy ndarray 或 pandas DataFrame，则转为列表
-        if isinstance(gtiarr, np.ndarray):
+        if isinstance(gtiarr, list):
+            pass
+        elif isinstance(gtiarr, np.ndarray):
             gtiarr = gtiarr.tolist()
         elif isinstance(gtiarr, pd.DataFrame):
             gtiarr = gtiarr.values.tolist()
+        elif isinstance(gtiarr, None):
+            continue
 
         # 处理单次GTI
         now_gti_set = None
@@ -270,7 +284,10 @@ def get_union_gti(*gtiarray):
         if gti_set is None:
             gti_set = now_gti_set
         else:
-            gti_set |= now_gti_set  # 并集运算
+            if now_gti_set is None:
+                continue
+            else:
+                gti_set |= now_gti_set  # 并集运算
 
     # 如果没有并集，返回空数组
     if gti_set is None or gti_set.empty:
@@ -323,13 +340,13 @@ def matching_time_unit(time):
         return f"{round(time*1e6)}us"
 
 
-def get_timeobj(TT, fits=None):
+def get_timeobj(TT, fitsfile=None):
     """
     输入HXMT的TT时间，返回时间对象
     """
     TT = float(TT)
-    if fits:
-        hdul = fits.open(fits)
+    if fitsfile:
+        hdul = fits.open(fitsfile)
         start_hxmt = Time(
             hdul[1].header["MJDREFI"] + hdul[1].header["MJDREFF"], format="mjd"
         )
@@ -341,18 +358,18 @@ def get_timeobj(TT, fits=None):
         return Time(unixTime, format="unix")
 
 
-def convert_TT2MJD(TT, fits=None):
+def convert_TT2MJD(TT, fitsfile=None):
     """
     将HXMT的TT时间转换为MJD
     """
-    return get_timeobj(TT, fits).mjd
+    return get_timeobj(TT, fitsfile).mjd
 
 
-def convert_TT2UTC(TT, fits=None):
+def convert_TT2UTC(TT, fitsfile=None):
     """
     将HXMT的TT时间转换为UTC时间
     """
-    return get_timeobj(TT, fits).utc.iso.split(".")[0].replace(" ", "T")
+    return get_timeobj(TT, fitsfile).utc.iso.split(".")[0].replace(" ", "T")
 
 
 def get_sliced_lc(lc, sliced_num):
@@ -575,9 +592,9 @@ def plotlc_stack(
     gti = None
     gtilst = []
     for index, lcfile in enumerate(lcfiles):
-        if gti_init:
+        if gti_init:  # 如果已经指定GTI
             gti = open_gti(gti_init, ndarray=True)
-            break  # 如果已经指定GTI
+            break
 
         lc = open_lc(lcfile)
         if len(lc.time) == 0 or len(lc.counts) == 0:
@@ -590,7 +607,7 @@ def plotlc_stack(
         lclst.append(lc)
 
     if gti is None:
-        gti = get_union_gti(*gtilst)
+        gti = get_union_gti(*gtilst)  # 返回GTI的并集，以显示所有数据
         if gti.shape[0] == 0:
             raise ValueError("No valid GTI found.")
 

@@ -147,27 +147,43 @@ class CommandExecutor:
 
 def gen_cmd_string(command: str, params, ktype: str = "keyword") -> str:
     """
-    生成命令字符串
+    根据给定的命令、参数和类型生成命令字符串。
+
+    参数:
+        command (str): 要执行的基本命令。
+        params (dict 或 list): 要包含在命令字符串中的参数。
+            - 如果 ktype 是 "keyword"，params 应该是一个字典。
+            - 如果 ktype 是 "stack"，params 应该是一个列表。
+            - 如果 ktype 是 "unix"，params 应该是一个字典。
+        ktype (str, 可选): 要生成的命令字符串类型。必须是 "keyword"、"stack" 或 "unix" 之一。默认为 "keyword"。
+
+    返回:
+        str: 生成的命令字符串。
+
+    异常:
+        ValueError: 如果命令为空。
+        ValueError: 如果 ktype 不是 "keyword"、"stack" 或 "unix" 之一。
+        ValueError: 如果 params 的类型不符合给定的 ktype。
     """
     if not command:
-        raise ValueError("The command cannot be empty!")
+        raise ValueError("命令不能为空！")
 
     if ktype not in ["keyword", "stack", "unix"]:
-        raise ValueError(f"{ktype} is an unknown type!")
+        raise ValueError(f"{ktype} 是未知的类型！")
 
     if ktype == "keyword":
         if not isinstance(params, dict):
-            raise ValueError('Params must be a dictionary when ktype is "keyword"!')
+            raise ValueError('当 ktype 为 "keyword" 时，params 必须是一个字典！')
         return f"{command} {format_keyword_params(params)}"
 
     if ktype == "stack":
         if not isinstance(params, list):
-            raise ValueError('Params must be a list when ktype is "stack"!')
+            raise ValueError('当 ktype 为 "stack" 时，params 必须是一个列表！')
         return f"{command} {format_stack_params(params)}"
 
     if ktype == "unix":
         if not isinstance(params, dict):
-            raise ValueError('Params must be a dictionary when ktype is "unix"!')
+            raise ValueError('当 ktype 为 "unix" 时，params 必须是一个字典！')
         return f"{command} {format_unix_params(params)}"
 
 
