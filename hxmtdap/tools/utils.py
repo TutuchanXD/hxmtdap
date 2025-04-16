@@ -22,6 +22,25 @@ def get_expID(path, check_basename=False):
         return expID[-1]
 
 
+def get_expID_path(path):
+    """
+    提取长路径中直到符合曝光ID的路径
+    """
+    exposure_id_pattern = r"P\d{12}[\d\-]*"
+
+    # 将路径按分隔符分割
+    path_parts = path.split(os.sep)
+
+    # 遍历路径的每一部分，寻找匹配曝光ID的层
+    for i, part in enumerate(path_parts):
+        if re.match(exposure_id_pattern, part):
+            # 找到匹配的曝光ID，返回从根到这一层的路径
+            return os.sep.join(path_parts[: i + 1])
+
+    # 如果没有找到匹配的曝光ID，返回空
+    return None
+
+
 def find_nearest(array, value):
     """
     找到数组中最接近指定值的元素值

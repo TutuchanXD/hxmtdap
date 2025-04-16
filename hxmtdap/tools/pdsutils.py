@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 
 from ..core.execute import CommandExecutor, gen_cmd_string
 from .lcutils import open_lc
+from .specutils import update_grp_file_paths
 
 mpl.rcParams["axes.linewidth"] = 2.0
 mpl.rcParams["legend.fontsize"] = 20.0
@@ -498,6 +499,7 @@ def save_as_file(fps, filename="output.fps", savebins: bool = True):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     hdul.writeto(filename, overwrite=True)
     del hdul
+    gc.collect()
 
     print(f"Power spectrum saved as {filename}")
     return
@@ -507,7 +509,6 @@ def fps2xsp(fpsfile, logger=None):
     """
     将fps转化为xspec可读的形式
     """
-    pwd = os.getcwd()
     if os.path.isabs(fpsfile):
         dirname = os.path.dirname(fpsfile)
         os.chdir(dirname)
@@ -525,11 +526,11 @@ def fps2xsp(fpsfile, logger=None):
             2 * dpower * dfreq,
         ]
     ).T
-    flux_filename = f"{prefix}_flux.txt"
+    flux_filename = os.path.join(dirname, f"{prefix}_flux.txt")
     np.savetxt(flux_filename, flux_data)
 
-    pha_file = f"{prefix}.pha"
-    rsp_file = f"{prefix}.rsp"
+    pha_file = os.path.join(dirname, f"{prefix}.pha")
+    rsp_file = os.path.join(dirname, f"{prefix}.rsp")
 
     params = {
         "infile": flux_filename,
@@ -538,12 +539,15 @@ def fps2xsp(fpsfile, logger=None):
         "clobber": "yes",
     }
     cmd_string = gen_cmd_string("flx2xsp", params, ktype="keyword")
-    # print(cmd_string)
     runner = CommandExecutor(logger=logger)
+    if logger:
+        logger.debug(f"run {cmd_string}")
+    else:
+        print(f"run {cmd_string}")
     runner.run(cmd_string)
 
-    os.chdir(pwd)
-    return os.path.join(dirname, pha_file)
+    update_grp_file_paths(pha_file)
+    return pha_file
 
 
 def get_allpdsdata_fromxcm(xcmfile=None, savecsv=False, plottype="euf", savefmt=None):

@@ -5,6 +5,30 @@ import numpy as np
 from scipy.integrate import quad
 from astropy.io import fits
 from astropy.time import Time
+import os
+
+
+def update_grp_file_paths(phafile):
+    """
+    Updates a PHA file by changing the absolute paths in 'respfile' and 'backfile'
+    header keys to just the file basenames.
+
+    Parameters
+    ----------
+    phafile : str
+        Path to the PHA file
+    """
+    with fits.open(phafile, mode="update") as hdul:
+        header = hdul[1].header
+
+        # Get current values and update to basenames if they exist
+        if "respfile" in header:
+            header["respfile"] = os.path.basename(header["respfile"])
+
+        if "backfile" in header:
+            header["backfile"] = os.path.basename(header["backfile"])
+
+        # Changes are automatically saved when the file is closed
 
 
 def get_exposure_from_pha(phafile):
@@ -71,31 +95,3 @@ def generate_GTI(time_array):
 
     hdulist = fits.HDUList([primary_hdu, secondary_hdu])
     return hdulist
-
-
-def standard_data_xcm1(expID):
-    xcm_data = (
-        "statistic chi\n"
-        + "cd ../output\n"
-        + f"data 1:1 {expID}_LE.pha\n"
-        + "\n"
-        + f"data 2:2 {expID}_ME.pha\n"
-        + "\n"
-        + f"data 3:3 {expID}_HE.pha\n"
-        + "\n"
-        + "cd ../fit\n"
-        + "ignore 1:**-3.0 10.0-** 2:**-10.0 30.0-** 3:**-30.0 150.0-**\n"
-    )
-    return xcm_data
-
-
-def standard_mcmc(mcmcfilename):
-    mcmc_string = (
-        "fit\n"
-        + "energies 0.01 1000. 2000 log\n"
-        + "chain len 50000\n"
-        + "chain burn 50000\n"
-        + "chain walker 200\n"
-        + f"chain run {mcmcfilename}\n"
-    )
-    return mcmc_string

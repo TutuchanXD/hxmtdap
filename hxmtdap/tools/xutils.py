@@ -2,6 +2,7 @@
 
 import os
 import re
+import shlex
 import tempfile
 from copy import copy
 from pathlib import Path
@@ -16,6 +17,225 @@ from astropy.table import Table
 from uncertainties import ufloat, umath
 
 APPOINTMENT = {"Rin": "0.1 1 1 100 100"}
+
+
+COMMAND_KEYWORDS = {
+    "statistic",
+    "method",
+    "abund",
+    "xsect",
+    "cosmo",
+    "xset",
+    "systematic",
+    "bayes",
+    "fit",  # 添加fit等其他常见命令
+    # 注意: query, error, renorm, tclout 等也可能是命令，根据需要添加
+}
+
+DATA_LOADING_KEYWORDS = {"cd", "data", "response", "backgrnd"}
+
+
+def parse_xcm_file(filename: str) -> list[str]:
+    """
+    解析 XCM 文件，将其内容分类为数据载入命令、其他命令、忽略范围和模型定义。
+
+    Args:
+        filename: XCM 文件的路径。
+
+    Returns:
+        一个包含四个字符串元素的列表：
+        [0]: 数据载入命令 (多行命令用换行符连接)。
+        [1]: 其他普通命令 (多行命令用换行符连接)。
+        [2]: 'ignore' 命令所在的行 (如果存在)，否则为空字符串。
+        [3]: 'model' 定义及其参数行 (多行用换行符连接)。
+    """
+    data_loading_commands = []  # 存储数据载入命令
+    other_commands = []  # 存储其他普通命令
+    ignore_str = ""  # 存储 ignore 命令行的字符串
+    model_lines = []  # 存储模型和参数行的列表
+    in_model = False  # 标记是否在模型部分内部
+
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+
+                parts = line.split()
+                if not parts:
+                    continue
+                first_word = parts[0]
+
+                # 核心逻辑判断
+                if first_word == "model":
+                    in_model = True
+                    model_lines.append(line)
+                elif in_model:
+                    # 检查是否是模型结束的标志
+                    # 注意: 数据载入命令通常不会出现在模型定义中间，但以防万一也检查
+                    if (
+                        first_word == "ignore"
+                        or first_word in COMMAND_KEYWORDS
+                        or first_word in DATA_LOADING_KEYWORDS
+                    ):
+                        in_model = False
+                        # 处理当前这行（结束模型部分的这行）
+                        if first_word == "ignore":
+                            ignore_str = line
+                        elif first_word in DATA_LOADING_KEYWORDS:
+                            data_loading_commands.append(line)
+                        else:  # 是其他命令关键字
+                            other_commands.append(line)
+                    else:
+                        # 继续作为模型参数行
+                        model_lines.append(line)
+                elif first_word == "ignore":
+                    ignore_str = line
+                elif first_word in DATA_LOADING_KEYWORDS:
+                    # 是数据载入命令
+                    data_loading_commands.append(line)
+                else:
+                    # 默认归类为其他普通命令
+                    # (这包括 COMMAND_KEYWORDS 中的命令以及未在任何列表中的命令)
+                    other_commands.append(line)
+
+    except FileNotFoundError:
+        print(f"错误：文件 '{filename}' 未找到。")
+        return ["", "", "", ""]
+    except Exception as e:
+        print(f"读取或解析文件 '{filename}' 时发生错误: {e}")
+        return ["", "", "", ""]
+
+    # 将列表合并为字符串
+    data_loading_str = "\n".join(data_loading_commands)
+    other_commands_str = "\n".join(other_commands)
+    model_str = "\n".join(model_lines)
+
+    # 返回包含四个字符串的列表
+    return [data_loading_str, other_commands_str, ignore_str, model_str]
+
+
+def extract_data_file_paths(
+    data_loading_commands_str: str, xcm_file_dir: str = None
+) -> list[str]:
+    """
+    从包含数据载入命令的字符串中提取 .pha, .rmf, .rsp 文件的绝对路径。
+    处理 'cd' 命令以解析相对路径。返回结果按解析顺序排列，并去除重复项。
+
+    Args:
+        data_loading_commands_str: 一个多行字符串，每行是一个数据载入命令
+                                    (通常是 parse_xcm_file 返回列表的第一个元素)。
+        xcm_file_dir: 可选参数，原始 XCM 文件所在的目录路径。
+                        如果提供，相对路径将相对于此目录解析；
+                        否则，相对路径将相对于当前工作目录解析 (os.getcwd())。
+
+    Returns:
+        一个包含找到的所有 .pha, .rmf, .rsp 文件绝对路径的列表，
+        按解析顺序排列，并去除重复项（保留首次出现的路径）。
+    """
+    file_paths = []  # 存储按顺序找到的所有路径（可能包含重复）
+    seen_paths = set()  # 用于快速检查路径是否已添加
+    ordered_unique_paths = []  # 最终返回的有序且唯一的路径列表
+
+    target_extensions = (".pha", ".rmf", ".rsp")
+
+    # 确定基础目录用于解析相对路径
+    if xcm_file_dir:
+        current_dir = os.path.abspath(xcm_file_dir)
+    else:
+        current_dir = os.getcwd()
+        # print("警告: 未提供 xcm_file_dir，相对路径将基于当前工作目录解析:", current_dir) # 可以取消注释此行进行调试
+
+    lines = data_loading_commands_str.strip().split("\n")
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # 移除行尾分号注释
+        comment_pos = line.find(";")
+        if comment_pos != -1:
+            line = line[:comment_pos].strip()
+
+        try:
+            parts = shlex.split(line, posix=(os.name != "nt"))
+        except ValueError:
+            print(f"警告: shlex 解析行失败，将使用简单分割: '{line}'")
+            parts = line.split()
+
+        if not parts:
+            continue
+
+        command = parts[0].lower()
+
+        if command == "cd":
+            if len(parts) > 1:
+                new_dir_part = parts[1]
+                if os.path.isabs(new_dir_part):
+                    current_dir = os.path.abspath(new_dir_part)
+                else:
+                    current_dir = os.path.abspath(
+                        os.path.join(current_dir, new_dir_part)
+                    )
+            # else:
+            #     print(f"警告: 'cd' 命令缺少参数: '{line}'") # 可以取消注释此行进行调试
+
+        elif command in ("data", "response", "backgrnd"):
+            found_file_on_line = False
+            for part in parts[1:]:
+                # 检查是否是目标文件类型 (忽略大小写)
+                part_lower = part.lower()
+                # 确保只匹配以这些扩展名结尾的部分，避免误匹配目录名等
+                is_target_file = False
+                for ext in target_extensions:
+                    if part_lower.endswith(ext):
+                        is_target_file = True
+                        break
+
+                if is_target_file:
+                    potential_file = part
+                    # 解析路径
+                    if os.path.isabs(potential_file):
+                        abs_path = os.path.abspath(potential_file)
+                    else:
+                        abs_path = os.path.abspath(
+                            os.path.join(current_dir, potential_file)
+                        )
+
+                    # 检查是否已经添加过这个路径
+                    if abs_path not in seen_paths:
+                        ordered_unique_paths.append(abs_path)
+                        seen_paths.add(abs_path)
+                    # 即使重复，也标记为已找到，以便跳出内循环（如果逻辑如此）
+                    found_file_on_line = True
+                    # 假设每行 data/resp/back 命令只指定一个主要文件
+                    break  # 移除了 break，以便处理一行有多个文件的情况？不，XCM通常一行一个
+            # if not found_file_on_line:
+            #     print(f"警告: 在 {command} 命令中未找到指定类型的文件: '{line}'") # 可以取消注释此行进行调试
+
+    return ordered_unique_paths
+
+
+def get_timerange_from_xcm(xcmfile):
+    """
+    从XCM文件中获取时间范围，应该传入XCM文件的绝对路径
+    返回MJD格式的时间范围
+    """
+    xcm_parsed = parse_xcm_file(xcmfile)
+    data_parsed = xcm_parsed[0]
+    phalst = extract_data_file_paths(data_parsed, os.path.dirname(xcmfile))
+
+    from .lcutils import convert_TT2MJD
+
+    # 提取TT时间默认使用第一个pha文件
+    tstart = fits.getheader(phalst[0], 1)["TSTART"]
+    tstop = fits.getheader(phalst[0], 1)["TSTOP"]
+    mjdstart = convert_TT2MJD(tstart)
+    mjdstop = convert_TT2MJD(tstop)
+
+    return mjdstart, mjdstop
 
 
 def get_phafile_from_xcm(xcmfile, more=False):
@@ -230,12 +450,20 @@ class LogDataResolver:
         if target_path:
             os.chdir(target_path)
 
+        # 生成一个log文件
         def _gen_log(xcmfile, logfile, prexcmfile):
             import xspec
 
-            xspec.AllModels.setEnergies("0.0001 1024. 3500 log")
             if bool(prexcmfile):
+                xspec.AllModels.setEnergies("0.0001 1024. 3500 log")
                 xspec.Xset.restore(prexcmfile)
+            else:
+                user_home = Path.home()
+                xspec_rcfile_relpath = Path(".xspec/pyxspec.rc")
+                xspec_rcfile = user_home / xspec_rcfile_relpath
+                if xspec_rcfile.exists():
+                    print(f"Using {str(xspec_rcfile)} file from home directory")
+                    xspec.Xset.restore(str(xspec_rcfile))
             xspec.Xset.restore(xcmfile)
             xspec.Xset.openLog(logfile)
             xspec.AllData.show()
@@ -435,7 +663,7 @@ class LogDataResolver:
         #         f.write(line + "\n")
         return "\n".join(xcm_content)
 
-    def stat_spec_result(self, mcmcfile=None, errange=90):
+    def stat_spec_result(self, mcmcfile=None, errange=90, get_value_from_mcmc=False):
         """
         统计能谱拟合结果，会从MCMC文件中获取参数误差
         """
@@ -462,13 +690,20 @@ class LogDataResolver:
         efree_dict = {}
         for pname, pvalue in free_dict.items():
             chains = mcmcchain.loc[:, pname]
-            percentileleft, percentileright = [
+            percentileleft, percentileright, percentilemid = [
                 (100 - errange) / 2,
                 100 - (100 - errange) / 2,
+                50,
             ]
-            vL, vU = np.percentile(chains, [percentileleft, percentileright])
-            errL, errU = (float(pvalue[0]) - vL), (vU - float(pvalue[0]))
-            efree_dict[pname] = [float(pvalue[0]), errL, errU]
+            vL, vU, vmid = np.percentile(
+                chains, [percentileleft, percentileright, percentilemid]
+            )
+            if get_value_from_mcmc:
+                v_used = vmid
+            else:
+                v_used = float(pvalue[0])
+            errL, errU = (v_used - vL), (vU - v_used)
+            efree_dict[pname] = [v_used, errL, errU]
 
         efree_pd = pd.DataFrame.from_dict(
             efree_dict, orient="index", columns=["value", "errL", "errU"]
@@ -561,6 +796,9 @@ class LogDataResolver:
             powerlaw_allpd = pd.DataFrame()
 
         if not bool(mcmcfile):
+            if ext_json:
+                ext_df = pd.read_json(ext_json).T
+                lorentz_allpd.update(ext_df)
             return lorentz_allpd.dropna(axis=1), powerlaw_allpd.dropna(axis=1)
         else:
             mcmcpd = open_chain(mcmcfile, modlabel=False)
@@ -865,17 +1103,19 @@ def generate_corner_plot(mcmcfile, percentiles=(0.05, 0.5, 0.95)):
     """
     mcmcpd = open_chain(mcmcfile)
 
-    corner_plot = corner(
-        data=mcmcpd.values,
-        labels=mcmcpd.columns,
-        quantiles=percentiles,
-        show_titles=True,
-        title_kwargs={
-            "fontsize": 8,
-        },
-    )
+    import matplotlib as mpl
 
-    return corner_plot
+    with mpl.rc_context():
+        corner_plot = corner(
+            data=mcmcpd.values,
+            labels=mcmcpd.columns,
+            quantiles=percentiles,
+            show_titles=True,
+            title_kwargs={
+                "fontsize": 8,
+            },
+        )
+        return corner_plot
 
 
 def convert_data_to_xspec(x, y, savepath, fileprefix, xerr=None, yerr=None):

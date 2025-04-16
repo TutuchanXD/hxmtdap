@@ -17,6 +17,7 @@ from .core.status import HEStatus
 from .tools.evtutils import plotpds_from_evt
 from .tools.lcutils import plotlc, plotbkg
 from .tools.pdsutils import plotpds
+from .tools.specutils import update_grp_file_paths
 
 
 class HEService(object):
@@ -103,6 +104,8 @@ class HEBasePipeline(object):
             fig.savefig(f"{output}.png")
             plt.clf()
             plt.close(fig)
+            del fig
+            gc.collect()
         except Exception as e:
             self.logger.error(f"Failed to save figure: {e}")
 
@@ -215,11 +218,11 @@ class HEScreenPipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            process = multiprocessing.Process(
-                target=self.save_figure, args=(output, plotpds_from_evt)
-            )
-            self.fig_processes.append(process)
-            process.start()
+            # process = multiprocessing.Process(
+            #     target=self.save_figure, args=(output, plotpds_from_evt)
+            # )
+            # self.fig_processes.append(process)
+            # process.start()
             return output
 
 
@@ -268,11 +271,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            process = multiprocessing.Process(
-                target=self.save_figure, args=(output, plotlc)
-            )
-            self.fig_processes.append(process)
-            process.start()
+            # process = multiprocessing.Process(
+            #     target=self.save_figure, args=(output, plotlc)
+            # )
+            # self.fig_processes.append(process)
+            # process.start()
             return output
 
     @capture_exception_fromM
@@ -306,11 +309,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            process = multiprocessing.Process(
-                target=self.save_figure, args=(output, plotbkg)
-            )
-            self.fig_processes.append(process)
-            process.start()
+            # process = multiprocessing.Process(
+            #     target=self.save_figure, args=(output, plotbkg)
+            # )
+            # self.fig_processes.append(process)
+            # process.start()
             return output
 
     @capture_exception_fromM
@@ -349,11 +352,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            process = multiprocessing.Process(
-                target=self.save_figure, args=(output, plotlc)
-            )
-            self.fig_processes.append(process)
-            process.start()
+            # process = multiprocessing.Process(
+            #     target=self.save_figure, args=(output, plotlc)
+            # )
+            # self.fig_processes.append(process)
+            # process.start()
             return output
 
     @capture_exception_fromM
@@ -401,11 +404,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            process = multiprocessing.Process(
-                target=self.save_figure, args=(output, plotpds)
-            )
-            self.fig_processes.append(process)
-            process.start()
+            # process = multiprocessing.Process(
+            #     target=self.save_figure, args=(output, plotpds)
+            # )
+            # self.fig_processes.append(process)
+            # process.start()
             return output
 
     @capture_exception_fromM
@@ -453,11 +456,11 @@ class HELightcurvePipeline(HEBasePipeline):
             self.logger.info(f"Generated {fnode}.")
 
             # 保存图像
-            process = multiprocessing.Process(
-                target=self.save_figure, args=(output, plotpds)
-            )
-            self.fig_processes.append(process)
-            process.start()
+            # process = multiprocessing.Process(
+            #     target=self.save_figure, args=(output, plotpds)
+            # )
+            # self.fig_processes.append(process)
+            # process.start()
             return output
 
 
@@ -601,6 +604,7 @@ class HESpectrumPipeline(HEBasePipeline):
             params["outfile"]
         )  # 检查输出文件，返回输出文件名
         if output:  # 如果有输出文件
+            update_grp_file_paths(output)
             fnode = self.recoder.add_files(node, file=output, **attrs)
             self.recoder.add_parents(fnode, parents)
             self.status.update("grp", fnode)

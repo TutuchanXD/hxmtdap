@@ -1,5 +1,7 @@
 import os
 import sys
+import shlex
+import psutil
 import logging
 import subprocess
 
@@ -102,22 +104,29 @@ class CommandExecutor:
             with self.console.status(
                 f"[bold green]Executing {software}...", spinner="dots"
             ):
-                results = subprocess.run(
-                    cmd_string,
+                cmd_lst = shlex.split(cmd_string)
+                process = subprocess.Popen(
+                    cmd_lst,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,  # 将stderr重定向到stdout
                     text=True,
-                    shell=True,
+                    # shell=True,
                 )
-                stdout_output = results.stdout.strip()
+                stdout_output, stderr_output = process.communicate()
+
+                # 手动关闭管道
+                process.stdout.close()
+                process.stderr.close()
+                process.wait()
 
                 # 检查stderr
                 if software not in ignore_error_exception_list:
-                    if results.stderr:
-                        self.logger.error(results.stderr.strip())
-                        raise CommandExecutionError(results.stderr.strip())
+                    if stderr_output and stderr_output.strip():
+                        self.logger.error(stderr_output.strip())
+                        raise CommandExecutionError(stderr_output.strip())
 
                 # 处理stdout
+                stdout_output = stdout_output.strip() if stdout_output else ""
                 if software in ignore_output_list:
                     return
                 # 检查错误关键字
