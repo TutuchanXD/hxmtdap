@@ -4,6 +4,7 @@ import re
 
 import numpy as np
 import pandas as pd
+from collections import deque
 
 
 def get_expID(path, check_basename=False):
@@ -39,6 +40,54 @@ def get_expID_path(path):
 
     # 如果没有找到匹配的曝光ID，返回空
     return None
+
+
+def find_expID_path(expID, dirpath=None, depth=-1):
+    """
+    在指定目录下查找包含特定曝光ID的路径
+
+    参数:
+        expID: 曝光ID
+        dirpath: 起始搜索目录，默认为当前目录
+        depth: 搜索深度，默认为-1表示无限深度
+            depth=0 表示只搜索起始目录
+            depth=1 表示搜索起始目录及其直接子目录
+            depth=2 表示搜索到"孙子"目录
+
+    返回:
+        找到的路径，未找到则返回None
+    """
+    # 如果dirpath为None，使用当前目录
+    if dirpath is None:
+        dirpath = os.getcwd()
+
+    # 确保dirpath是有效的目录路径
+    if not os.path.isdir(dirpath):
+        raise ValueError(f"指定的路径'{dirpath}'不是一个有效的目录")
+
+    # 使用队列实现广度优先搜索
+    queue = deque([(dirpath, 0)])  # (路径, 当前深度)
+    while queue:
+        current_path, current_depth = queue.popleft()
+        # 如果达到指定深度限制，跳过此路径
+        if depth != -1 and current_depth > depth:
+            continue
+        try:
+            # 获取当前目录下的所有项目
+            items = os.listdir(current_path)
+            # 首先检查当前层的目录
+            for item in items:
+                full_path = os.path.join(current_path, item)
+                if os.path.isdir(full_path) and expID in item:
+                    return full_path
+            # 将子目录添加到队列中
+            for item in items:
+                full_path = os.path.join(current_path, item)
+                if os.path.isdir(full_path):
+                    queue.append((full_path, current_depth + 1))
+        except (PermissionError, OSError):
+            # 忽略没有权限访问的目录
+            continue
 
 
 def find_nearest(array, value):

@@ -3,11 +3,12 @@
 import os
 import re
 import shlex
+import shutil
 import tempfile
+import subprocess
 from copy import copy
 from pathlib import Path
 from typing import Literal
-from multiprocessing import Process
 
 import numpy as np
 import pandas as pd
@@ -434,50 +435,117 @@ class LogDataResolver:
         self.logfile = logfile
         self.parameters_stat = {}
         self.model_used = ""
+        self.statistics = {"Statistic": None, "Bins": None}
         self.extract_data()
 
         self.xcmfile = None
 
     @staticmethod
-    def from_xcmfile(xcmfile, prexcmfile=None):
+    def from_xcmfile(xcmfile, prexcmfile=None, timeout=None):
         """
-        从XCM文件中生成log，返回LogDataResolver对象
+        从XCM文件生成log，返回LogDataResolver对象。
+        并发安全：不修改全局CWD；不再起 multiprocessing.Process 子进程。
+        通过 `subprocess.run(["xspec"], cwd=...)` 执行 XSPEC 命令脚本。
         """
+        xcmfile = str(Path(xcmfile).resolve())
+        xcm_dir = str(Path(xcmfile).parent.resolve())
+        xcm_name = Path(xcmfile).name
 
-        logfile = xcmfile.replace(".xcm", ".log")
-        nowpath = os.getcwd()
-        target_path = os.path.dirname(xcmfile)
-        if target_path:
-            os.chdir(target_path)
+        # 日志文件使用与输入同名的 .log，存放在同目录
+        logfile = str(Path(xcmfile).with_suffix(".log"))
+        log_name = Path(logfile).name
 
-        # 生成一个log文件
-        def _gen_log(xcmfile, logfile, prexcmfile):
-            import xspec
+        # prexcmfile 若给出，也转为绝对路径；在 xspec 中用相对名（基于 cwd=xcm_dir）
+        prexcm_rel = None
+        if prexcmfile:
+            prexcmfile = str(Path(prexcmfile).resolve())
+            prexcm_rel = (
+                str(Path(prexcmfile).relative_to(xcm_dir))
+                if Path(prexcmfile).is_relative_to(xcm_dir)
+                else prexcmfile
+            )  # 若不在同目录，仍然可用绝对路径
 
-            if bool(prexcmfile):
-                xspec.AllModels.setEnergies("0.0001 1024. 3500 log")
-                xspec.Xset.restore(prexcmfile)
-            else:
-                user_home = Path.home()
-                xspec_rcfile_relpath = Path(".xspec/pyxspec.rc")
-                xspec_rcfile = user_home / xspec_rcfile_relpath
-                if xspec_rcfile.exists():
-                    print(f"Using {str(xspec_rcfile)} file from home directory")
-                    xspec.Xset.restore(str(xspec_rcfile))
-            xspec.Xset.restore(xcmfile)
-            xspec.Xset.openLog(logfile)
-            xspec.AllData.show()
-            xspec.AllModels.show()
-            xspec.Fit.show()
-            xspec.Xset.closeLog()
+        # 可选：从用户家目录加载 pyxspec.rc（若存在）
+        user_home = Path.home()
+        xspec_rcfile = user_home / ".xspec" / "pyxspec.rc"
+        xspec_rc_rel = None
+        if xspec_rcfile.exists():
+            try:
+                xspec_rc_rel = (
+                    str(xspec_rcfile.relative_to(xcm_dir))
+                    if xspec_rcfile.is_relative_to(xcm_dir)
+                    else str(xspec_rcfile)
+                )
+            except Exception:
+                xspec_rc_rel = str(xspec_rcfile)
 
-        process = Process(target=_gen_log, args=(xcmfile, logfile, prexcmfile))
-        process.start()
-        process.join()
-        if target_path:
-            os.chdir(nowpath)
+        # 生成一个临时的 xspec 脚本（与输入文件同目录），避免 chdir
+        # 注意：XSPEC 脚本里 '@file' 表示执行 file.xcm
+        run_xcm_path = str(Path(xcm_dir) / "_run_for_log.xcm")
+        script_lines = []
 
-        loger = LogDataResolver(logfile)
+        # 若提供 prexcm，先设能量网格，再 restore
+        if prexcm_rel:
+            script_lines.append("energies 0.0001 1024. 3500 log")
+            script_lines.append(f"@{prexcm_rel}")
+        # 否则若家目录有 rc，就先加载
+        elif xspec_rc_rel:
+            script_lines.append(f"@{xspec_rc_rel}")
+
+        # 再加载目标 xcm
+        script_lines.append(f"@{xcm_name}")
+
+        # 打开日志
+        script_lines.append(f"log {log_name}")
+        # 输出关键信息到日志
+        script_lines += ["show all", "log none", "exit"]
+
+        with open(run_xcm_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(script_lines) + "\n")
+
+        # 准备环境：限制并行库线程数，隔离 PFILES，避免并发互相干扰
+        env = dict(os.environ)
+        env.setdefault("OMP_NUM_THREADS", "1")
+        env.setdefault("OPENBLAS_NUM_THREADS", "1")
+        env.setdefault("MKL_NUM_THREADS", "1")
+        env.setdefault("NUMEXPR_NUM_THREADS", "1")
+        env.setdefault("HEADASNOQUERY", "1")
+        pfiles_dir = str(Path(xcm_dir) / "pfiles")
+        os.makedirs(pfiles_dir, exist_ok=True)
+        env["PFILES"] = f"{pfiles_dir};{env.get('PFILES','.')}"
+        # 若你的 HEASOFT/CALDB 需要额外环境变量，也可在这里 env[...] 指定
+
+        # 确认 xspec 可执行存在
+        xspec_prog = shutil.which("xspec")
+        if not xspec_prog:
+            raise RuntimeError(
+                "未找到 'xspec' 可执行文件，请确认已正确初始化 HEASOFT/XSPEC 环境。"
+            )
+
+        # 运行 XSPEC：把我们生成的脚本喂给 stdin
+        try:
+            with open(run_xcm_path, "rb") as fin:
+                subprocess.run(
+                    [xspec_prog],
+                    stdin=fin,
+                    cwd=xcm_dir,  # << 关键：不切全局CWD，仅为本次调用指定工作目录
+                    env=env,
+                    stdout=subprocess.PIPE,  # 如需调试也可改为 None
+                    stderr=subprocess.PIPE,
+                    timeout=timeout,  # 可传入秒数避免卡死
+                    check=True,
+                )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"XSPEC 执行失败（returncode={e.returncode}）。"
+                f"\nSTDOUT:\n{e.stdout.decode('utf-8', 'ignore')}\n"
+                f"\nSTDERR:\n{e.stderr.decode('utf-8', 'ignore')}"
+            )
+        except subprocess.TimeoutExpired:
+            raise TimeoutError(f"XSPEC 执行超时：{run_xcm_path}")
+
+        # 构建并返回 LogDataResolver
+        loger = LogDataResolver(logfile)  # 你的现有构造应能用绝对路径
         loger.xcmfile = xcmfile
         return loger
 
@@ -504,6 +572,11 @@ class LogDataResolver:
         # - ([\n0-9\.pE\+\-\*]*): 匹配自由参数的参考误差.
         parameter_pattern = r"(\d+)[ \t]+(\d+)[ \t]+(\w+)[ \t]+(\w+)[ \t\w\-\^]+[ \t]([0-9\.E\+\-]+)[ \t]+(frozen|\+/\-[ \t]|=[ \t])([\n0-9\.pE\+\-\*/^]*)[ \t\n]*"
 
+        # 匹配统计量的正则
+        statistic_pattern = (
+            r"Test\sstatistic\s:\s[\w\-]+\s+([\d\.]+)\s+using\s([\d]+)\sbins\."
+        )
+
         # 模型提取
         model_match = re.search(model_pattern, log_data)
         self.model_used = (
@@ -515,6 +588,13 @@ class LogDataResolver:
 
         # 模型列表提取
         self.components = list(re.findall(r"\b(\w+)<\d+>", self.model_used))
+
+        # 统计量提取
+        statistics = re.findall(statistic_pattern, log_data)[0]
+        self.statistics = {
+            "Statistic": float(statistics[0]),
+            "Bins": int(statistics[1]),
+        }
 
         # 参数提取
         parameters = re.findall(parameter_pattern, log_data)
@@ -682,6 +762,10 @@ class LogDataResolver:
             else:
                 free_dict[f"{param_name}__{index}"] = [param_value]
 
+        free_dict["REDUCED_CHI2"] = [
+            self.statistics["Statistic"] / self.statistics["Bins"]
+        ]
+
         if not bool(mcmcfile):
             return pd.DataFrame.from_dict(free_dict, orient="index", columns=["value"])
         else:
@@ -689,7 +773,10 @@ class LogDataResolver:
 
         efree_dict = {}
         for pname, pvalue in free_dict.items():
-            chains = mcmcchain.loc[:, pname]
+            if pname != "REDUCED_CHI2":
+                chains = mcmcchain.loc[:, pname]
+            else:
+                chains = (mcmcchain.loc[:, "FIT_STATISTIC"]) / self.statistics["Bins"]
             percentileleft, percentileright, percentilemid = [
                 (100 - errange) / 2,
                 100 - (100 - errange) / 2,
@@ -1028,6 +1115,7 @@ def separate_singel_result(xcmfile, plotmod: Literal["uf", "euf"] = "euf"):
     os.chdir(dirpath)
 
     xspec.Xset.restore(xcmfilename)
+    xspec.AllModels.setEnergies("0.001 1024. 3500 log")
     logfile = f"{xcmfileprefix}.log"
     xspec.Xset.openLog(logfile)
     xspec.AllData.show()

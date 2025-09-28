@@ -126,13 +126,25 @@ def get_lightcurve_obj(lctb: Table, lcgti=None, header=None):
     else:
         gti = extract_gti_from_lc(lctb.columns[0].value)
 
+    time = lctb.columns[0].value
+    counts = lctb.columns[1].value
+
     lcobj = Lightcurve(
-        time=lctb.columns[0].value,
-        counts=lctb.columns[1].value,
-        err=lctb.columns[2].value,
+        time=time,
+        counts=counts,
         gti=gti,
         skip_checks=True,
     )
+
+    if "ERROR" in lctb.colnames:
+        counts_err = lctb.columns["ERROR"]
+    elif "Error" in lctb.colnames:
+        counts_err = lctb.columns["Error"]
+    else:
+        counts_err = None
+
+    if counts_err is not None:
+        lcobj.counts_err = counts_err.value
 
     if header:
         lcobj.mjdref = header["MJDREFI"] + header["MJDREFF"]
@@ -309,15 +321,26 @@ def get_timerange_from_lc(lc, mjd=False):
     lcins = open_lc(lc)
     time_start = lcins.time[0]
     time_stop = lcins.time[-1]
+    if mjd:
+        time_start = convert_TT2MJD(time_start, lc)
+        time_stop = convert_TT2MJD(time_stop, lc)
     return {"tstart": time_start, "tstop": time_stop}
 
 
-def get_meanrate_from_lc(lc):
+def get_meanrate_from_lc(lc, err=False):
     """
     获取平均计数率
     """
     lcins = open_lc(lc)
-    return lcins.meanrate
+    meanrate = np.mean(lcins.countrate)
+    if not err:
+        return meanrate
+    elif err:
+        countrate_err = lcins.countrate_err
+        if countrate_err is not None:
+            meanrate_err = np.sqrt(np.sum(countrate_err**2)) / len(countrate_err)
+            return meanrate, meanrate_err
+    return meanrate, None
 
 
 def matching_time_unit(time):
@@ -344,7 +367,8 @@ def get_timeobj(TT, fitsfile=None):
     """
     输入HXMT的TT时间，返回时间对象
     """
-    TT = float(TT)
+    if isinstance(TT, str):
+        TT = float(TT)
     if fitsfile:
         hdul = fits.open(fitsfile)
         start_hxmt = Time(
@@ -370,6 +394,13 @@ def convert_TT2UTC(TT, fitsfile=None):
     将HXMT的TT时间转换为UTC时间
     """
     return get_timeobj(TT, fitsfile).utc.iso.split(".")[0].replace(" ", "T")
+
+
+def convert_MJD2UTC(MJD):
+    """
+    将HXMT的MJD时间转换为UTC时间
+    """
+    return Time(MJD, format="mjd").utc.iso.split(".")[0].replace(" ", "T")
 
 
 def get_sliced_lc(lc, sliced_num):
@@ -480,9 +511,15 @@ def generate_netlc(lcraw, lcbkg):
     return rawlc_hdul
 
 
-def convert_lc2fits(lightcurve, template_fits, fitsname, headers=None):
+def convert_lc2fits(lightcurve, template_fits, fitsname=None, headers=None):
+    """
+    将光变曲线转换为FITS文件，可以使用模板FITS文件的格式
+    """
     hdul = fits.open(template_fits)
-    lcdf = lightcurve.to_pandas()[["time", "counts", "counts_err"]]
+    try:
+        lcdf = lightcurve.to_pandas()[["time", "counts", "counts_err"]]
+    except KeyError:
+        lcdf = lightcurve.to_pandas()[["time", "_counts", "_counts_err"]]
     lcdf.columns = ["TIME", "COUNTS", "ERROR"]
     lctb = Table.from_pandas(lcdf)
     if headers is None:
@@ -495,8 +532,242 @@ def convert_lc2fits(lightcurve, template_fits, fitsname, headers=None):
     gtitb = Table.from_pandas(gtidf)
     gtiBTH = fits.BinTableHDU(gtitb)
     hdul[2].data = gtiBTH.data
-    hdul.writeto(f"{fitsname}", overwrite=True)
-    return hdul
+    if fitsname:
+        hdul.writeto(f"{fitsname}", overwrite=True)
+        return hdul
+    else:
+        return hdul
+
+
+def rebin_nonuniform(
+    time, counts, dt_new, counts_err=None, method="mean", empty_bin_value=np.nan
+):
+    """
+    对非均匀采样的时变数据进行重采样，生成新的时间bin并计算平均计数和标准误差。
+    支持带有误差的计数序列，使用 uncertainties 包进行误差传播。
+
+    参数
+    ----------
+    time : array-like
+        原始时间序列（非均匀采样）。
+    counts : array-like
+        对应的计数序列。
+    dt_new : float
+        新的时间分辨率（新bin的宽度）。
+    counts_err : array-like, optional
+        计数序列的误差，长度需与 counts 相同。若为 None，则不进行误差计算。
+    method : str, optional
+        计数处理方法，当前仅支持 "mean"（默认）。
+    empty_bin_value : float or np.nan, optional
+        空bin的计数值和误差，默认为 np.nan。
+
+    返回
+    -------
+    bin_time : numpy.ndarray
+        新bin的中点时间序列。
+    bin_counts : numpy.ndarray
+        新bin的计数序列（平均值或空值）。
+    bin_counts_err : numpy.ndarray
+        新bin的标准误差（若适用）。
+    """
+    time = np.asanyarray(time)
+    counts = np.asanyarray(counts)
+
+    if len(time) != len(counts):
+        raise ValueError("time 和 counts 的长度必须相等！")
+
+    if counts_err is not None:
+        from uncertainties import unumpy
+
+        counts_err = np.asanyarray(counts_err)
+        if len(counts_err) != len(counts):
+            raise ValueError("counts_err 的长度必须与 counts 相等！")
+
+    if dt_new <= 0:
+        raise ValueError("dt_new 必须为正数！")
+
+    t_start = np.min(time)
+    t_end = np.max(time)
+
+    bin_edges = np.arange(t_start, t_end + dt_new, dt_new)
+    bin_time = bin_edges[:-1] + dt_new / 2
+
+    bin_counts = np.full(len(bin_time), empty_bin_value, dtype=float)
+    bin_counts_err = np.full(len(bin_time), empty_bin_value, dtype=float)
+
+    for i in range(len(bin_edges) - 1):
+        mask = (time >= bin_edges[i]) & (time < bin_edges[i + 1])
+        selected_counts = counts[mask]
+
+        if len(selected_counts) > 0:
+            if method == "mean":
+                if counts_err is not None:
+                    # 使用 uncertainties 处理误差传播
+                    selected_counts_with_err = unumpy.uarray(
+                        selected_counts, counts_err[mask]
+                    )
+                    mean_result = np.mean(
+                        selected_counts_with_err
+                    )  # 使用 np.mean 处理 uarray
+                    bin_counts[i] = mean_result.n
+                    bin_counts_err[i] = mean_result.s
+                else:
+                    # 无误差输入时，使用标准方法
+                    bin_counts[i] = np.mean(selected_counts)
+                    if len(selected_counts) > 1:
+                        bin_counts_err[i] = np.std(selected_counts, ddof=1) / np.sqrt(
+                            len(selected_counts)
+                        )  # 标准误差
+                    else:
+                        bin_counts_err[i] = 0  # 单一数据点无标准误差
+            else:
+                raise ValueError("当前仅支持 method='mean'")
+
+    return bin_time, bin_counts, bin_counts_err
+
+
+def rebin_nonuniform_asymmetric(
+    time,
+    counts,
+    dt_new,
+    counts_err_lower=None,
+    counts_err_upper=None,
+    method="mean",
+    empty_bin_value=np.nan,
+):
+    """
+    对非均匀采样的时间序列数据（如天文光变曲线）进行重采样（rebin）。
+
+    此函数专门设计用于处理和传播非对称误差。它使用 `uncertainties` 包，
+    通过分别处理上、下误差限，来计算新时间 bin 内计数的平均值及其传播后的非对称误差。
+
+    参数
+    ----------
+    time : array-like
+        原始数据的时间序列（可以是秒、MJD等）。
+    counts : array-like
+        与时间序列对应的计数值。
+    dt_new : float
+        新的时间分辨率，即每个新 bin 的宽度。
+    counts_err_lower : array-like, optional
+        计数值的下限误差。如果提供，则必须同时提供 `counts_err_upper`。
+    counts_err_upper : array-like, optional
+        计数值的上限误差。如果提供，则必须同时提供 `counts_err_lower`。
+    method : str, optional
+        bin内数据的聚合方法。当前仅支持 "mean"（默认）。
+    empty_bin_value : float or np.nan, optional
+        如果一个新 bin 内没有任何数据点，则用此值填充。默认为 np.nan。
+
+    返回
+    -------
+    bin_time : numpy.ndarray
+        新时间 bin 的中心点序列。
+    bin_counts : numpy.ndarray
+        新时间 bin 内的平均计数值。
+    bin_counts_err_lower : numpy.ndarray
+        新时间 bin 内平均计数的传播后下限误差。
+    bin_counts_err_upper : numpy.ndarray
+        新时间 bin 内平均计数的传播后上限误差。
+    """
+    # --- 1. 输入校验和初始化 ---
+    time = np.asanyarray(time)
+    counts = np.asanyarray(counts)
+
+    if time.shape != counts.shape:
+        raise ValueError("`time` 和 `counts` 的形状必须一致！")
+
+    if dt_new <= 0:
+        raise ValueError("`dt_new` 必须为正数！")
+
+    # 检查误差输入的一致性
+    has_lower_err = counts_err_lower is not None
+    has_upper_err = counts_err_upper is not None
+    if has_lower_err != has_upper_err:
+        raise ValueError(
+            "`counts_err_lower` 和 `counts_err_upper` 必须同时提供或同时不提供。"
+        )
+
+    has_errors = has_lower_err and has_upper_err
+    if has_errors:
+        try:
+            from uncertainties import unumpy
+        except ImportError:
+            raise ImportError(
+                "此功能需要 `uncertainties` 包。请运行 `pip install uncertainties` 进行安装。"
+            )
+        counts_err_lower = np.asanyarray(counts_err_lower)
+        counts_err_upper = np.asanyarray(counts_err_upper)
+        if (counts.shape != counts_err_lower.shape) or (
+            counts.shape != counts_err_upper.shape
+        ):
+            raise ValueError("误差数组的形状必须与 `counts` 数组一致！")
+
+    # --- 2. 创建新的时间 bins ---
+    if len(time) == 0:
+        return np.array([]), np.array([]), np.array([]), np.array([])
+
+    t_start = np.min(time)
+    t_end = np.max(time)
+
+    bin_edges = np.arange(t_start, t_end + dt_new, dt_new)
+    bin_time = bin_edges[:-1] + dt_new / 2.0
+
+    num_bins = len(bin_time)
+    bin_counts = np.full(num_bins, empty_bin_value, dtype=float)
+    bin_counts_err_lower = np.full(num_bins, empty_bin_value, dtype=float)
+    bin_counts_err_upper = np.full(num_bins, empty_bin_value, dtype=float)
+
+    # --- 3. 循环填充新的 bins ---
+    for i in range(num_bins):
+        # 找到落入当前 bin 的数据点
+        mask = (time >= bin_edges[i]) & (time < bin_edges[i + 1])
+
+        # 如果 bin 为空，则跳过
+        if not np.any(mask):
+            continue
+
+        selected_counts = counts[mask]
+
+        if method == "mean":
+            if has_errors:
+                # --- 非对称误差传播 ---
+                # 1. 使用下限误差创建不确定性数组
+                selected_counts_lower_err = unumpy.uarray(
+                    selected_counts, counts_err_lower[mask]
+                )
+                # 2. 使用上限误差创建另一个不确定性数组
+                selected_counts_upper_err = unumpy.uarray(
+                    selected_counts, counts_err_upper[mask]
+                )
+
+                # 3. 分别计算平均值
+                mean_lower_result = np.mean(selected_counts_lower_err)
+                mean_upper_result = np.mean(selected_counts_upper_err)
+
+                # 4. 提取结果
+                bin_counts[i] = mean_lower_result.nominal_value
+                bin_counts_err_lower[i] = mean_lower_result.std_dev
+                bin_counts_err_upper[i] = mean_upper_result.std_dev
+            else:
+                # --- 无输入误差时的标准处理 ---
+                # 计算均值
+                bin_counts[i] = np.mean(selected_counts)
+
+                # 计算均值的标准误差 (Standard Error of the Mean)
+                n_points = len(selected_counts)
+                if n_points > 1:
+                    # ddof=1 for sample standard deviation
+                    std_err = np.std(selected_counts, ddof=1) / np.sqrt(n_points)
+                    bin_counts_err_lower[i] = std_err
+                    bin_counts_err_upper[i] = std_err
+                else:
+                    # 单个数据点无法计算标准误差
+                    bin_counts_err_lower[i] = 0.0
+                    bin_counts_err_upper[i] = 0.0
+        else:
+            raise NotImplementedError(f"方法 '{method}' 尚未实现。")
+
+    return bin_time, bin_counts, bin_counts_err_lower, bin_counts_err_upper
 
 
 def plotlc_concat(
